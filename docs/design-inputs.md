@@ -12,8 +12,8 @@ All of this is genuinely useful and is why the donor unit is worth building arou
 
 | Item | Part | Notes |
 |---|---|---|
-| Relay board | PMLN5639_ | **Entirely passive.** Ten Tyco relays, ten 15 A fuses, lightbar terminal blocks, power lugs, busbar. No active parts, no drivers, no regulator. |
-| Wire harness | 0975931M01 | Being reused as-is. Carries **switched 9 V coil drive**, not logic-level commands. |
+| Relay board | PMLN5639_ | **Entirely passive.** Ten Tyco relays, ten 15 A fuses, terminal blocks, power lugs, busbar. No active parts, no drivers, no regulator. |
+| Wire harness | 0975931M01 | Being reused as-is. Carries power and coil drive, not logic-level commands. |
 | Chassis | — | Sealed, metal, trunnion-mounted. Cable glands with per-wire radial gaskets. |
 | Channel rating | — | 15 A per output, matching the fuse and relay rating. |
 | Input feed | — | Busbar, one or two cables, **60 A maximum per cable** — the capability of the busbar, lugs, and glands. |
@@ -35,6 +35,34 @@ These describe three different things and are often conflated. They are all corr
 Worth stating plainly, because it substantially simplifies the design: the load current never touches the controller PCB. It runs **busbar → relay contact → fuse → output terminal**, entirely on the passive relay board.
 
 ORC's board only needs a **low-current A+ tap** for the 9 V coil supply and its own logic. The current there is bounded by ten relay coils plus the ESP32 — not by the 60 A input capability or the 150 A theoretical contact total. The "automotive input transient protection" line below refers to that low-current control tap.
+
+### Inherited per-channel capability, and what limits it
+
+Bench inspection 2026-07-31. **Inspection findings and estimates, not instrumented measurements.**
+
+| Element | Finding | Confidence |
+|---|---|---|
+| Tyco relays | **40 A rated parts** — far above the 15 A system rating | Observed (part rating) |
+| A+ busbar | Good for roughly **150 A total in short bursts**, both cables fed | Estimate, not measured |
+| PCB traces, fuse positions, terminal blocks | **The actual limiting factor**, not the contacts | Observed |
+| Relays **9 and 10** | Only two channels with convenient room for heavier copper, by layout accident | Observed |
+
+Uprating a channel is disproportionately expensive: IPC-2221's external relation (`I = 0.048 × ΔT^0.44 × A^0.725`) inverts to **area ∝ I^1.38**, so 15 A → 25 A needs ~2.0× the copper and 15 A → 40 A needs ~3.7×.
+
+If a channel ever needs uprating, note that **solder lumping is weak and bonded wire is strong** — solder runs ~8× copper's resistivity (SAC305 ~13 µΩ·cm, Sn63Pb37 ~15, Cu 1.72), so a generous fillet buys only ~1.25× conductance, while 12 AWG (3.31 mm², ~5130 mils²) is ~14× a 2 oz/128 mil trace. Best is a conductor from busbar straight to the relay terminal, bypassing the trace.
+
+Two caveats that make trace work pointless on its own:
+
+- **The fuse clip and terminal block don't improve with copper.** The chain is busbar → trace → contact → trace → fuse clip → fuse → trace → terminal block → output. Verify those two are rated for the target before reinforcing anything upstream.
+- **The enclosure is sealed**, so heat only leaves through the chassis. Validate any uprating with a **thermal soak, lid on** — not an open-bench measurement.
+
+## Requirements this places on ORC
+
+**Channel mapping must be configurable, not hardcoded.** The ten channels are *not* electrically identical — 9 and 10 have headroom the rest don't. Function-to-channel assignment therefore belongs in configuration, so a high-draw load can be placed on a capable channel without rewiring.
+
+rigOS already has hooks for relay number assignment, so the platform side of this is solved; ORC's firmware needs to expose channel identity and accept the mapping rather than assuming a fixed layout.
+
+Open, not yet a requirement: **per-channel current sensing.** If channels differ in capability, knowing actual draw would let firmware enforce limits rather than trusting configuration. Costs board area and BOM — worth deciding deliberately rather than defaulting either way.
 
 ## To be rebuilt
 
