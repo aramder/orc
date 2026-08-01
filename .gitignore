@@ -29,8 +29,11 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Claude Code local working state (permissions, per-machine logbooks) -- not team policy
-.claude/
+# Claude Code local working state (permissions, worktrees) -- not team policy.
+# Exception: kicad-mcp-logbook.md is project history, not machine-specific
+# config -- tracked deliberately so it travels with the repo across machines.
+.claude/*
+!.claude/kicad-mcp-logbook.md
 hardware/.kicad-mcp/
 
 # KiCad MCP debug/export artifacts -- regenerable, not authoritative
