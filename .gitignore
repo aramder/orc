@@ -31,3 +31,4 @@ Thumbs.db
 
 # Claude Code local working state (permissions, per-machine logbooks) -- not team policy
 .claude/
+hardware/.kicad-mcp/
