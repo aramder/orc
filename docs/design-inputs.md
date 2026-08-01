@@ -16,9 +16,25 @@ All of this is genuinely useful and is why the donor unit is worth building arou
 | Wire harness | 0975931M01 | Being reused as-is. Carries **switched 9 V coil drive**, not logic-level commands. |
 | Chassis | — | Sealed, metal, trunnion-mounted. Cable glands with per-wire radial gaskets. |
 | Channel rating | — | 15 A per output, matching the fuse and relay rating. |
-| Input feed | — | Busbar, one or two cables at 60 A each, each behind its own 60 A breaker. |
+| Input feed | — | Busbar, one or two cables, **60 A maximum per cable** — the capability of the busbar, lugs, and glands. |
 
-> **Unresolved contradiction carried over from the source manuals:** both manuals state two mains cables at 60 A each behind 60 A breakers, while install-manual Figure 2-21 labels a 16 A circuit breaker. **Do not size input wiring off either figure** until the busbar and the actual breaker (part 40012006001) have been metered.
+### On the 60 A / 16 A / 15 A figures
+
+These describe three different things and are often conflated. They are all correct:
+
+| Figure | What it is |
+|---|---|
+| **60 A per cable, ×2** | Capability of the input path — busbar, lugs, glands |
+| **16 A** | Motorola's *specified* installation breaker, part 40012006001 |
+| **15 A per output** | Per-channel fuse on the relay board |
+
+**The circuit breaker is external, vehicle-side hardware** — installed inline between the URC's power lug and the battery ("AUX" end to the URC, "BAT" end to the supply). There is no breaker inside the enclosure, and ORC does not need to provide one. Input protection remains an installation choice, sized to the actual load and cable, and is not an ORC board-level concern.
+
+### ORC's board does not carry the high-current path
+
+Worth stating plainly, because it substantially simplifies the design: the load current never touches the controller PCB. It runs **busbar → relay contact → fuse → output terminal**, entirely on the passive relay board.
+
+ORC's board only needs a **low-current A+ tap** for the 9 V coil supply and its own logic. The current there is bounded by ten relay coils plus the ESP32 — not by the 60 A input capability or the 150 A theoretical contact total. The "automotive input transient protection" line below refers to that low-current control tap.
 
 ## To be rebuilt
 
@@ -72,6 +88,7 @@ Candidate families to check against:
 - [ ] **Pin count and pinout mapping.** Expect ten switched coil legs plus a common 9 V feed and return(s) — roughly 12–13 positions. Confirm by counting and identify each position.
 - [ ] **High-side vs low-side switching.** Sets driver topology.
 - [ ] **Flyback diode presence on the relay board.** Changes the driver design.
+- [ ] **Does the harness carry A+ up to the controller board, or is A+ tapped separately from the busbar?** The 9 V rail derives from A+, but the route is not established. This determines whether ORC's board connector needs to carry the A+ feed or whether a separate lug/tap is required.
 
 ### Coil and thermal
 
