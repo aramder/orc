@@ -32,3 +32,6 @@ Thumbs.db
 # Claude Code local working state (permissions, per-machine logbooks) -- not team policy
 .claude/
 hardware/.kicad-mcp/
+
+# KiCad MCP debug/export artifacts -- regenerable, not authoritative
+hardware/output/

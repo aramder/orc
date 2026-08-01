@@ -5,7 +5,7 @@
       "args": ["kicad-mcp-pro"],
       "env": {
         "KICAD_MCP_PROJECT_DIR": "hardware",
-        "KICAD_MCP_PROFILE": "default",
+        "KICAD_MCP_PROFILE": "agent_full",
         "KICAD_MCP_OPERATING_MODE": "write",
         "KICAD_CLI_PATH": "C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe"
       }
