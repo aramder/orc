@@ -1,0 +1,26 @@
+# Local-only reference material: datasheets, photos, captures, mechanical
+# scans. Keep large or non-redistributable files out of git.
+/refs/
+
+# KiCad (for when hardware lands here or in orc-hardware)
+*-backups/
+*.kicad_prl
+fp-info-cache
+*.bak
+*.kicad_pcb-bak
+*.sch-bak
+
+# PlatformIO / build
+.pio/
+.vscode/
+build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS cruft
+.DS_Store
+Thumbs.db
