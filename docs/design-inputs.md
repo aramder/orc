@@ -102,9 +102,9 @@ Nothing below is assumed. These gate the schematic.
 
 ### Harness header — the critical interface
 
-Confirmed by inspection: **generic shrouded, non-keyed male header.** Pitch measured by eye as **>3 mm — not yet confirmed with calipers.**
+**Resolved: plain 0.1" (2.54mm) pitch, unshrouded, vertical male header** — not the shrouded 3.96/4.20/5.08mm part guessed from the initial by-eye inspection. The candidate-family table below is now superseded; kept for record.
 
-Candidate families to check against:
+Superseded candidate table (initial by-eye guess, before the actual 0.1" header was confirmed):
 
 | Pitch | Family | Notes |
 |---|---|---|
@@ -112,16 +112,28 @@ Candidate families to check against:
 | 4.20 mm | Molex Mini-Fit Jr | Higher current capability |
 | 5.08 mm (0.2") | Various | Less likely at this pin count |
 
-- [ ] **Pitch, with calipers.** Picks the connector family and the PCB footprint.
-- [ ] **Pin count and pinout mapping.** Expect ten switched coil legs plus a common 9 V feed and return(s) — roughly 12–13 positions. Confirm by counting and identify each position.
-- [ ] **High-side vs low-side switching.** Sets driver topology.
-- [ ] **Flyback diode presence on the relay board.** Changes the driver design.
-- [ ] **Does the harness carry A+ up to the controller board, or is A+ tapped separately from the busbar?** The 9 V rail derives from A+, but the route is not established. This determines whether ORC's board connector needs to carry the A+ feed or whether a separate lug/tap is required.
+- [x] **Pitch.** **0.1" (2.54mm), unshrouded, vertical, THT male header.** LCSC **C2977586** (ZHOURI 2.54-1×40, breakable strip, snap to 14 positions), Extended, 2.5A rated, -40 to +105°C — clears automotive temp range with margin. See circuit-draft.md BOM #7.
+- [x] **Pin count and pinout mapping.** **14 positions, confirmed by count**, not the guessed 12–13:
+
+  | Pin | Function |
+  |---|---|
+  | 1 | Coil common return ("coil −", shared across all 10 channels) |
+  | 2 | A+ |
+  | 3–12 | Coil 1+ … Coil 10+ (one per channel) |
+  | 13, 14 | Chassis (relay-board side) |
+
+- [x] **High-side vs low-side switching.** **Confirmed high-side** — individual "Coil N+" per channel with one shared common return, matching the positive-switched decision already locked in circuit-draft.md independently of this measurement.
+- [ ] **Flyback diode presence on the relay board.** Still open — the pinout doesn't resolve this; still needs bench inspection or continuity/diode check across a coil's harness pins.
+- [x] **Does the harness carry A+ up to the controller board, or is A+ tapped separately from the busbar?** **Confirmed: pin 2 is A+, carried by the harness.** ORC's board connector needs to carry the A+ feed directly — no separate lug/tap required.
+
+### Ground topology — dismissed, not a concern
+
+Pin 1 (coil common) and pins 13/14 (chassis) are three separate wires on the connector, not one labeled net. Flagged earlier as a possible star-grounding question given the isolation architecture — **user call: not important, tie them together as one common ground.** No special handling needed on Domain B's ground plane.
 
 ### Coil and thermal
 
-- [ ] **Coil resistance**, measured directly across the harness — the relay board is passive, so this is a straight DMM reading. **This sizes the 9 V switcher. No value should be assumed for it.**
-- [ ] **Total coil current with all ten energized**, checked against the harness and ground-path ratings. This is the worst case.
+- [x] **Coil current — measured: 45mA per coil at 9V, room temperature, reliable across all 10 channels** (user-measured). Implies coil resistance ≈ 200Ω (not independently verified via direct DMM reading, backed out from V/I). Total current with all ten energized: 0.45A at 9V (~4.05W) — sizes the 9V switcher, see circuit-draft.md. Coil resistance rises with temperature, so this room-temp figure is likely near the higher end of the real operating current range, not a worst-case-low estimate.
+- [ ] **Total coil current checked against harness and ground-path ratings** — the 0.45A figure above is well within any plausible harness rating, but hasn't been explicitly cross-checked against the harness pin gauge/rating.
 - [ ] **Tyco relay part number**, and whether all ten are identical single-pole parts.
 
 ### Mechanical

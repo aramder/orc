@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="280" viewBox="0 0 1200 280">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f6f8fa"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="280" fill="url(#bg)"/>
+  <text x="60" y="118" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="72" font-weight="700" fill="#1f2328">ORC</text>
+  <text x="60" y="160" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="24" font-weight="400" fill="#57606a">Open Relay Controller</text>
+  <text x="60" y="200" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#6e7781">Open, ESP32-S3 controller for the Motorola PMUN1046A relay box</text>
+  <!-- ten-channel relay indicator -->
+  <g transform="translate(700,90)">
+    <text x="0" y="-14" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#6e7781" letter-spacing="2">10 CHANNELS · 15A EACH</text>
+    <g>
+      <rect x="0"   y="0" width="34" height="34" rx="4" fill="#2da44e"/>
+      <rect x="44"  y="0" width="34" height="34" rx="4" fill="#2da44e"/>
+      <rect x="88"  y="0" width="34" height="34" rx="4" fill="#2da44e"/>
+      <rect x="132" y="0" width="34" height="34" rx="4" fill="#2da44e"/>
+      <rect x="176" y="0" width="34" height="34" rx="4" fill="#2da44e"/>
+      <rect x="0"   y="44" width="34" height="34" rx="4" fill="#d0d7de"/>
+      <rect x="44"  y="44" width="34" height="34" rx="4" fill="#d0d7de"/>
+      <rect x="88"  y="44" width="34" height="34" rx="4" fill="#d0d7de"/>
+      <rect x="132" y="44" width="34" height="34" rx="4" fill="#d0d7de"/>
+      <rect x="176" y="44" width="34" height="34" rx="4" fill="#d0d7de"/>
+    </g>
+  </g>
+</svg>
