@@ -8,6 +8,14 @@ Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Is
 
 **Status legend** (carried from the old BOM.md): ✅ LCSC confirmed live · ⚠️ real part/value decided, tier or wiring detail still open · ❌ real unresolved gap · 🔧 KiCad-side symbol/footprint work needed, not a sourcing gap.
 
+## OPEN ARCHITECTURE DECISION — MCU module, not locked, don't source against U7/J4/U5/R11/R12 yet
+
+**Mechanical finding, 2026-08-01**: only ~8.5mm clearance between the two stacked PCBs in the enclosure — not enough room for both a USB-C connector and the required DC+CAN screw terminal on a single-sided board. There's a cutout in the upper board exposing ~20mm of the lower board's edge near the connector location, which could fit the screw terminal, but the USB-C receptacle's current footprint doesn't obviously coexist with it.
+
+**Direction, pending research**: rather than solve the connector-placement problem, replace the bare ESP32-S3-WROOM-1U + custom USB-C/ESD/CC-pulldown circuit (U7, J4, U5, R11, R12 below) with a **complete pre-made ESP32-S3 module** that already has USB-C, ESD, and USB circuitry built in — mounted onto ORC's board rather than designed on it. **Hard requirement carried forward unchanged: external antenna (U.FL) support** — this board is in a sealed metal enclosure, PCB-trace-antenna-only modules are disqualified regardless of price. A sourcing/research pass for real candidates is in progress (2026-08-01) — **do not source or lock U7/J4/U5/R11/R12 further until that lands**; they may all get replaced by a single module part number. SW1/SW2 (EN/BOOT buttons) may also become redundant if the chosen module already has its own — don't build those into the schematic as final until the module is picked.
+
+This also has a welcome side effect if it proceeds: dropping the custom USB-C ingress removes the VBUS-vs-DC-terminal source-select stage (Q1/Q3/Q4/Q5, still legacy-root-only) entirely — including Q4/Q5's gate-drive chain, which has been an unresolved electrical gap since early in the project. Domain A power ingress would simplify to just the DC terminal path, same shape as Domain B.
+
 ## Housekeeping — found in the 2026-08-01 documentation audit, not yet resolved
 
 - **Catch diode value — resolved 2026-08-01: SS34 (C8678) is correct.** Root schematic's D2/D3 still show "SS56" (stale, predates the correction) — harmless since root is legacy and not sourced from, but don't let it confuse a future read of root.

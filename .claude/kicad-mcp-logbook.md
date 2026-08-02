@@ -283,3 +283,13 @@ Committed the SW1/SW2 doc update (`0dcdef7`), then `git pull` pulled in `2115714
 - **Confirms one Housekeeping item from earlier today was wrong to leave as "unverified"** — root's `J2` "(C2827883)" number turned out to be genuinely correct, not a stray. Good catch by whoever ran that other session; the capture guide's Housekeeping section now reflects the confirmed state.
 
 Local is now ahead of `origin/main` by this merge commit (`30bf9b0`) — not pushed. If another session is actively working on this repo, worth pushing soon to avoid a second collision, and worth being aware there's at least one other active session before assuming exclusive ownership of `hardware/` going forward.
+
+## 2026-08-01 — mechanical finding reopens the CAN-vs-USB decision
+
+User measurement: only ~8.5mm clearance between the two stacked PCBs in the enclosure, not enough room for both the USB-C connector and the DC+CAN screw terminal on a single-sided board. This fires circuit-draft.md's own long-standing caveat ("CAN is provisional — descope if it doesn't comfortably fit the board") but in the opposite direction than anticipated — USB is what doesn't fit, not CAN.
+
+Direction under consideration, not locked: drop the bare ESP32-S3-WROOM-1U + custom USB-C/ESD/CC-pulldown circuit (U7/J4/U5/R11/R12), replace with a complete pre-made ESP32-S3 module that already has USB-C built in, used for programming/debug only — CAN becomes the primary control path. Hard requirement carried forward: external antenna (U.FL) support, since this board is in a sealed metal enclosure — disqualifies most cheap PCB-antenna-only modules.
+
+Noted the underappreciated upside: this doesn't just solve the mechanical problem, it retires Q1/Q3/Q4/Q5 (the USB-VBUS-vs-DC-terminal source-select stage) entirely, including Q4/Q5's gate-drive chain, which has been an unresolved electrical gap since early in the project ("values never worked out... likely needs a second stage").
+
+Dispatched a research pass (background agent) for real ESP32-S3 module candidates meeting: USB-C onboard, external-antenna support (verified per-candidate, not assumed), ≥8MB flash, live purchasable, reasonably compact. Flagged in subcircuit-capture-guide.md as an OPEN ARCHITECTURE DECISION — **don't source or lock U7/J4/U5/R11/R12 further until it lands**, and don't treat SW1/SW2 as final since the eventual module may already have its own EN/BOOT buttons. Also updated circuit-draft.md's decisions table with a "reopened" entry cross-referencing the same note.
