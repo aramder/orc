@@ -15,7 +15,7 @@ Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Is
 - **Root's `J2` symbol carries "(C2827883)" embedded in its description field** — an LCSC-shaped number that was never carried into a BOM's LCSC column and never went through a documented Gate 1 pass. Don't treat it as sourced; if J2/J6's real DORABO DB128L-5.08-4P-GN-S terminal ever needs re-verifying, start fresh rather than assuming C2827883 is right.
 - **Root has a stray `R4 22kΩ`** with no documented function anywhere in current or historical BOM content. Possibly a leftover from the dropped TVS/load-dump analysis network. Needs a function check before it's either sourced or written off as dead.
 - **PCB is significantly out of sync with the current schematic** (checked 2026-08-01): the entire Power Side B subcircuit (U10/R26/L4/R27/D6) is placed in the schematic but absent from the PCB; U7 (ESP32) and U9 (ADuM1250) are also missing from the PCB despite their support passives being placed. What *is* on the PCB uses stale ref numbers from before the last schematic re-annotation (`U3`→`U8`, `R18`/`R19`→`R24`/`R25` are the same physical parts). Needs a `pcb_sync_from_schematic` pass once the schematic itself is further along — resyncing now would just need to happen again.
-- **Still unresolved from the prior pass**: SW1 (MCU sheet, tactile switch — no documented function), J5 (Communications, 2-pin header — unclear role), R13 (Communications, 10kΩ 0.1% — unclear role), and a bare `GND` power symbol on the MCU sheet where everywhere else uses `GND_A` specifically.
+- **Still unresolved from the prior pass**: J5 (Communications, 2-pin header — unclear role), R13 (Communications, 10kΩ 0.1% — unclear role), and a bare `GND` power symbol on the MCU sheet where everywhere else uses `GND_A` specifically. (SW1's function is resolved — see MCU sheet — and it's the same part as the still-to-be-placed SW2/BOOT button.)
 
 ---
 
@@ -61,7 +61,7 @@ Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Is
 
 ## MCU — `mcu.kicad_sch`
 
-**Purpose**: ESP32-S3 core, plus one new part not previously documented.
+**Purpose**: ESP32-S3 core, plus reset/boot buttons.
 
 **Parts placed today**:
 
@@ -74,12 +74,12 @@ Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Is
 | R15 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull (verify which — 3 identical parts placed, function not distinguished in the pulled data) | C25804 | ⚠️ part confirmed, exact net assignment not individually re-verified |
 | R16 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull | C25804 | ⚠️ same caveat |
 | R17 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull | C25804 | ⚠️ same caveat |
-| SW1 | TS-1187A-B-A-B (tactile switch) | **New — no prior documentation.** Likely reset or boot-mode button. | — | ❌ needs a one-line function spec (what net, what purpose) before it's worth a Gate 1 pass |
+| SW1 | XKB Connection TS-1187A-B-A-B (tactile switch) | **Confirmed 2026-08-01**: EN/reset button — momentary, pulls EN low through this switch to GND | C318884 | ✅ sourced live 2026-08-01: SMD-4P 5.1×5.1mm, 12V/50mA rating (plenty for logic-level use), **-30 to +85°C** (comfortably covers this enclosure's 65-85°C ambient — no thin-margin concern like the PCA9555's), 100k-cycle life, 1,068,940 in stock. Tier badge didn't render to fetch; stock depth strongly suggests Basic, not independently confirmed. |
+| SW2 | Same part, C318884 | **New, not yet placed** — GPIO0/BOOT button, same electrical role as SW1 (momentary to GND). EN alone can't select boot mode; without this there's no way to force download/bootloader mode without desoldering the sealed enclosure if the native-USB auto-reset path ever fails. GPIO0_A's pull-up already exists (one of R15/R16/R17) — SW2 just needs to land on that same net → GND. | C318884 | 🔧 needs to be added to the schematic — part already sourced (same as SW1), just not drawn yet |
 
 **Nets present**: `EN_A`, `GPIO0_A`, `GPIO46_A`, `SCL_A`, `SDA_A`, `UART_RX_A`, `UART_TX_A`, `USB_N`, `USB_P` (renamed from `USB_DM`/`USB_DP` — same signals). Plus a bare `GND` power symbol near SW1 — inconsistent with every other Domain A ground reference (`GND_A`), see Housekeeping above.
 
 **Open items**:
-- SW1's function and net — real gap, see table.
 - R15/R16/R17's exact roles (EN pull-up / GPIO0 pull-up / GPIO46 pull-down) not individually confirmed from position alone.
 - 28-GPIO no-connect marking carried from legacy root (pins 4,5,6,7,8,9,10,11,15,18,19,20,21,22,23,24,25,26,28,29,30,31,32,33,34,35,38,39, all reversible) hasn't been re-verified as present on this sheet's U7 instance.
 
@@ -192,6 +192,7 @@ PF1, PF3, PF5, PF6, PF7, PF8 — `power:PWR_FLAG`, 6×, ERC bookkeeping only. Ea
 ## Section 🔧 — needs real KiCad symbol/footprint work, not a sourcing gap
 
 - **U1/U7 — ESP32-S3-WROOM-1U footprint.** See MCU sheet above.
+- **SW2 — GPIO0/BOOT button.** Not a footprint issue, a placement issue: part is sourced (XKB TS-1187A-B-A-B, C318884, same as SW1), just needs to actually be drawn on the MCU sheet and wired to `GPIO0_A` ↔ GND.
 - **J5/J6 — DORABO DB128L-5.08-4P-GN-S.** Right-angle 5.08mm screw terminal, mechanically specific (chosen after two push-in-spring candidates failed the wire-entry/actuator requirement). Verify KiCad's connector footprint libraries have a matching right-angle 5.08mm 4-pos footprint, or build one from DORABO's datasheet drawing.
 - **F1, F2 — PTC fuse footprint.** Confirm the placed footprint actually matches C207083's real SMD 2-pad package, not a generic fuse symbol's default footprint.
 - **Q2 — Domain B reverse-polarity FET footprint.** TO-252/DPAK, not the SOT-23 the placeholder used — real footprint swap, not just a value edit.

@@ -259,3 +259,17 @@ Full audit requested ("anywhere we might be missing a part") — pulled fresh sy
 6. Confirmed still-open, no new info: SW1, J5, R13 (all unresolved from the prior pass).
 
 **BOM.md retired** — user call ("get rid of the bom document since it's redundant and confusing"). Everything still current from it (full parts tables, tier caveats, the "pending KiCad edits" list, the 🔧 footprint-work section) was folded into docs/subcircuit-capture-guide.md, which is now the single source of truth for parts/LCSC numbers, organized by the same 5-sheet hierarchy. References in README.md and circuit-draft.md updated to point at subcircuit-capture-guide.md instead. hardware/scripts/rebuild.py has a couple of comments mentioning BOM.md — left alone, no functional dependency (the script never reads the file).
+
+Committed as `abf8ed5`.
+
+## 2026-08-01 — SW1 resolved, GPIO0/BOOT button added
+
+User confirmed SW1's function: ESP32-S3 EN/reset button. Verified live against the schematic (`sch_trace_net`): `EN_A` has 3 connections (pull-up + EN pin + SW1) matching that story exactly; `GPIO0_A` has only 2 (pull-up + pin) — no switch, confirming there was no way to force bootloader/download mode by button press.
+
+Flagged that EN alone doesn't select boot mode — GPIO0 does, and without a button there, recovering from a wedged native-USB auto-reset path on this sealed-enclosure board means desoldering. User agreed to add a second button (SW2) on GPIO0, same part as SW1.
+
+Dispatched a Gate 1 sourcing pass for TS-1187A-B-A-B (SW1 had never actually been sourced — placed with a value but no LCSC number). User provided the number directly (C318884) before the agent finished; verified it live via WebFetch rather than trusting it unchecked: **XKB Connection TS-1187A-B-A-B, C318884** — SMD-4P 5.1×5.1mm, 12V/50mA, **-30 to +85°C** (comfortably clears this enclosure's 65-85°C ambient, unlike the PCA9555's thin-margin case), 100k-cycle life, 1,068,940 in stock. Tier badge didn't render to fetch (the now-familiar pattern) — stock depth suggests Basic, not independently confirmed.
+
+Updated subcircuit-capture-guide.md: SW1 now ✅ with real LCSC and confirmed function; SW2 added as a new 🔧 line (part sourced, not yet drawn — needs to land on `GPIO0_A` ↔ GND on the MCU sheet). Removed SW1 from the "still unresolved" housekeeping list.
+
+**Background sourcing agent for this same part was still running when the user gave the number directly** — its result will land as a separate notification; reconcile against C318884 when it does rather than treating both as independent findings.
