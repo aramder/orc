@@ -4,7 +4,7 @@ Working document for parts selection and topology, ahead of schematic capture in
 
 **Status: draft, not locked.** Several items below are flagged *unresolved* — do not order parts against those without a follow-up pass.
 
-**For manual schematic capture**, see [subcircuit-capture-guide.md](subcircuit-capture-guide.md) — the decisions below organized by functional block with real net-level wiring, pulled from the live schematic's connectivity graph rather than this document's chronological decision log. [hardware/BOM.md](../hardware/BOM.md) has the reconciled parts list.
+**For manual schematic capture, parts, and LCSC numbers**, see [subcircuit-capture-guide.md](subcircuit-capture-guide.md) — the decisions below organized by KiCad sheet with real net-level wiring, pulled from the live schematic's connectivity graph rather than this document's chronological decision log. (`hardware/BOM.md` was retired 2026-08-01 — redundant with that doc once it existed.)
 
 ## Decisions made this session
 

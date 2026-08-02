@@ -1,254 +1,204 @@
 # ORC subcircuit capture guide
 
-Functional-block breakdown of the schematic for manual capture in KiCad, pulled directly from the live `orc.kicad_sch` connectivity graph on 2026-08-01 (post-fix: PWR_FLAG net collision and FB_B/COIL_9V stray label both resolved — see [kicad-mcp-logbook.md](../.claude/kicad-mcp-logbook.md)). Parts and LCSC numbers are in [hardware/BOM.md](../hardware/BOM.md); this doc is the "how it wires together," organized by block instead of by decision-chronology like [circuit-draft.md](circuit-draft.md).
+Single source of truth for parts, LCSC numbers, and wiring — organized by the **actual KiCad sheet hierarchy** in `hardware/*.kicad_sch`. `hardware/BOM.md` was retired 2026-08-01 (redundant, drifted out of sync with the new sheets' ref numbering) — everything from it that was still current lives here now.
 
-Net names below are the actual local-label names already used in the schematic — reuse them verbatim if you're re-capturing so the two stay comparable.
+Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Isolator. Same one-sheet-per-function pattern continues for whatever gets captured next. **Root `orc.kicad_sch` is legacy** — its content is being superseded sheet-by-sheet, not maintained in parallel. Where a sheet below is missing parts a legacy-root block already had, that's flagged explicitly as **not yet migrated**, not a design change, unless stated otherwise.
 
-**One net still has an unresolved short, not yet blocking capture but worth knowing going in**: `COIL_9V` and `GND_B` currently report as the same net in KiCad's own connectivity engine, and neither this session's exhaustive coordinate-level investigation nor the fixes already applied found the cause (logbook has the full trace — every individual pin checked resolves to its textually-correct label). **Use KiCad's Highlight Net tool on `COIL_9V` vs `GND_B` before wiring block 8 below** — a human eye on the rendered sheet will likely spot in seconds what coordinate-archaeology couldn't. If you're recapturing block 8 from scratch, this may be moot — the bug is presumably specific to some artifact of the existing wire layout, not the topology description below (which is correct per circuit-draft.md's decisions).
+**Ref designators were reassigned during the hierarchical split** — don't cross-reference old block-numbered refs (U1–U8, Q1–Q5, R1–R18 from the pre-split BOM) against these; use the ref shown in each sheet's table, which matches what's actually in the file today.
 
----
+**Status legend** (carried from the old BOM.md): ✅ LCSC confirmed live · ⚠️ real part/value decided, tier or wiring detail still open · ❌ real unresolved gap · 🔧 KiCad-side symbol/footprint work needed, not a sourcing gap.
 
-## Domain A (isolated ground) — MCU / USB side
+## Housekeeping — found in the 2026-08-01 documentation audit, not yet resolved
 
-### 1. Power ingress + source-select
-
-**Purpose**: two possible Domain A power sources (USB-C VBUS or a dedicated hardwired DC terminal), only one ever electrically connected to the buck's Vin at a time — active P-FET disconnect, not diode-OR (rejected: see circuit-draft.md's numeric analysis).
-
-**Parts** (from [hardware/BOM.md](../hardware/BOM.md); resistors 0603 per board default). The Q4/Q5/R15 gate-drive chain is a **flagged open item, see below**:
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| J1 | USB-C receptacle, Hroparts TYPE-C-31-M-12 | USB-C VBUS/data ingress | C165948 | Basic/Extended tier not confirmed live |
-| J5 | DORABO DB128L-5.08-4P-GN-S | DC + CAN screw terminal | — | needs KiCad footprint check (right-angle 5.08mm 4-pos) |
-| F1 | 0.75A PTC, Littelfuse-class | Input resettable fuse | C207083 | verify 85°C-derated hold current against load before trusting |
-| Q1 | AO3401A | Reverse-polarity FET (DC-terminal input) | C15127 | SOT-23 P-ch |
-| R1 | 10kΩ ±1% 0603, UNI-ROYAL | Q1 gate bias | C25804 | board default 10k |
-| Q3 | AO3401A | Source-select FET (disconnects DC path when VBUS present) | C15127 | gate-drive stage around it unverified |
-| Q4 | MMBT2222A | USB-presence-detect NPN | — | open item: a single NPN pulling toward GND cannot turn a high-side P-FET *off*; likely needs a second stage |
-| Q5 | 2nd-stage transistor (NPN/PNP unresolved) | Inverts Q4 output to high-side gate drive | — | referenced in wiring, not in BOM; part of the same unresolved gate-drive gap |
-| R14 | 10kΩ ±1% 0603, UNI-ROYAL | Q3 gate pull-down (default: DC path ON) | C25804 | |
-| R15 | 10kΩ ±1% 0603, UNI-ROYAL | Q4 base resistor from VIN_BUCK_A | C25804 | same open item as Q4 |
-| C19 | 1µF/100V | VIN_BUCK_A bypass (TVS-adjacent) | — | generic, not individually sourced |
-
-**Wiring**:
-- `J5:1` (DC terminal, "AUX" pin) → `F1:1` → `F1:2` = net **`VEH_RAIL_A`** → `Q1:2` (drain)
-- `Q1:1` (gate) — biased by `R1` from `Q1_GATE` net; `Q1:3` (source) → net **`V_PROT_A`**, shared with `Q3:2` and the TVS/analysis nodes
-- `Q3:1` (gate) ← `Q3_GATE` net ← `R14` (pull-down, default ON) and `Q5:3` (NPN collector, when driven)
-- `Q3:3` (source) → net **`VIN_BUCK_A`** — this is the buck's actual Vin node
-- USB-C: `J1:A4/A9/B4/B9` (VBUS pins, all 4 shorted per USB-C spec) also land directly on **`VIN_BUCK_A`** — i.e. VBUS and the DC-terminal path (through Q3) both feed the same Vin node, which is the whole point of the source-select
-- `Q4` (NPN) senses VBUS presence via its base (`Q4_BASE` net ← `R15` from `VIN_BUCK_A`) and its collector (`Q4_COL` net) drives `Q5` (`Q5_BASE` net), which drives `Q3`'s gate
-
-**Known-incomplete, don't just copy this stage as-is**: circuit-draft.md flags this exact gate-drive chain ("values not yet worked out") and this session's review adds: a single NPN pulling toward GND cannot pull a high-side P-FET gate up to *turn it off* — as drawn this likely needs a second stage (e.g. the existing Q5 PNP is probably meant to be that second stage, inverting Q4's output back to a high-side-appropriate drive level, but the exact resistor values around it were never derived). Verify the logic level at Q3's gate in both VBUS-present and VBUS-absent states before trusting this block.
-
-**J1 USB-C pins not otherwise used**: `SHIELD`, `CC1`, `CC2`, `SBU1`, `SBU2`. SHIELD/SBU1/SBU2 are legitimately no-connect (no altmode support needed). **CC1/CC2 are a real open item, not a no-connect** — USB-C spec requires 5.1kΩ Rd pull-downs to ground on both CC pins for the port to be recognized by a host and receive VBUS at all. Not yet sourced or placed.
-
-### 2. Domain A buck (U3) — VIN_BUCK_A → 3V3_A
-
-**Parts + part numbers** (LCSC/JLCPCB, from circuit-draft.md's sourcing pass; resistors are 0603 per the board default). Statuses carry the same caveats as [hardware/BOM.md](../hardware/BOM.md) — verify tier live before locking:
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| U3 | LM2596S-ADJ | Buck regulator, VIN_BUCK_A → 3V3_A | C963385 | TO-263, adjustable, 3A, Vin 4.5–40V |
-| L1 | 68µH, KOHERelec MDA1870-680M | Buck inductor | C3015595 | SMD pad-mount 17.8×16.9mm; tier unverified |
-| D3 | SS34, MDD | Catch diode | C8678 | 40V/3A Schottky, SMA(DO-214AC); meets the ≥36V catch-diode req (1.25×28.8V) with ~11% headroom |
-| C1, C1B | 47µF/63V ×2, Nichicon PCR1J470MCL1GS | CIN bulk (parallel, ~94µF) | C3274436 | SMD polymer |
-| C3 | 1µF/100V X7R, Samsung CL31B105KCHNNNE | CIN ceramic bypass at U3 pin | C13832 | 1206 |
-| C2 | 220µF/35V, NJCON 2210350810R00 | COUT bulk | C5243827 | polymer (fallback ROQANG C72498, wet electrolytic) |
-| — | 1µF/50V X7R, Samsung CL21B105KBFNNNE | COUT ceramic bypass | C28323 | 0805; confirm it exists as its own ref in the schematic |
-| R2 | 2.0kΩ ±1% 0603, UNI-ROYAL 0603WAF2001T5E | FB divider, top (3V3_A → FB_A) | C22975 | **Basic**; 0603 (was 0805 C17604) |
-| R3 | 1.2kΩ ±1% 0603, UNI-ROYAL 0603WAF1201T5E | FB divider, bottom (FB_A → GND_A) | C22765 | **Basic**; 0603 (was 0805 C17379) |
-
-FB divider sets Vout = 1.23 × (1 + R2/R3) = 1.23 × (1 + 2.0k/1.2k) = **3.28V** (0.6% low of 3.3V, within margin). **No CFF on this instance** — the feedforward cap (1nF, C29925) is only on the 9V coil buck (U4), since 3.3V is well under TI's >10V CFF trigger.
-
-**Wiring**:
-- `VIN_BUCK_A` → `U3:1` (Vin) and `U3:5` (ON/OFF, tied high = always on) — also → `C1:1`/`C1B:1` (CIN+) and `C3:1` (bypass)
-- `U3:2` (switch node) = net **`SW_A`** → `L1:1`; `D3:2` (catch diode cathode) also on `SW_A`
-- `L1:2` → net **`3V3_A`** (buck output) → `C2:1`/`C2:2`... actually `C2:1` on `3V3_A`, `C2:2` on `GND_A` (standard output cap orientation) → feeds the whole Domain-A 3.3V rail (ESP32, CAN transceiver, ADuM1250 primary side, etc. — see block 3/5)
-- FB divider: `3V3_A` → `R2:1`, `R2:2`/`R3:1` = net **`FB_A`** → `U3:4` (FB pin), `R3:2` → `GND_A`
-- `U3:3` (GND) and `D3:1` (catch diode anode) both on **`GND_A`**
-
-### 3. ESP32-S3 core (U1)
-
-**Parts**:
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| U1 | ESP32-S3-WROOM-1U-N8 | MCU (external antenna) | — | schematic symbol is the -1 (PCB-antenna) footprint; swap to the real -1U footprint before layout; confirm -N8 = 8MB/no-PSRAM |
-| C4 | 10µF/25V, Samsung | Main 3.3V entrance decoupling | C96446 | **JLC Basic** |
-| C6 | 0.1µF/50V, Samsung | 3V3 pin decoupling | C14663 | **JLC Basic**; place close to the module's 3V3 pin |
-| C8 | 10µF/25V, Samsung | EN RC cap | C96446 | **JLC Basic**; same part as C4 (was 1µF) |
-| R4 | 10kΩ ±1% 0603, UNI-ROYAL | EN RC pull-up to 3V3_A | C25804 | ≥50µs assert/deassert per datasheet |
-| R5 | 10kΩ ±1% 0603, UNI-ROYAL | GPIO0 pull-up (normal-boot strap) | C25804 | |
-| R6 | 10kΩ ±1% 0603, UNI-ROYAL | GPIO46 pull-down (SPI-boot strap) | C25804 | |
-
-**Wiring**:
-- `U1:2` (3.3V entrance) ← `3V3_A`, decoupled by C4 (10µF at entrance) + C6 (0.1µF at the module's 3V3 pin — keep close to the pin, not just anywhere on the rail). The WROOM-1U module exposes a single 3V3 supply pin, not the die-level VDD3P3_CPU/VDD3P3_RTC pins, so only one high-frequency decoupler is needed here.
-- `U1:1/40/41` (GND pins) → `GND_A`
-- `U1:3` (EN) → net **`EN_A`** ← `R4` (10k to 3V3_A) with `C8` (1µF) to GND — standard EN RC, ≥50µs assert/deassert per datasheet
-- `U1:27` (GPIO0) → net **`GPIO0_A`** ← `R5` pull-up to 3V3_A (normal-boot strap)
-- `U1:16` (GPIO46) → net **`GPIO46_A`** ← `R6` pull-down to GND_A (SPI-boot strap)
-- `U1:13/14` (GPIO19/20, native USB D-/D+) → `USB_DM`/`USB_DP` — see block 4
-- `U1:12/17` (I2C) → `SDA_A`/`SCL_A` — see block 5
-- `U1:36/37` (UART) → `UART_RX_A`/`UART_TX_A` ← `U7` (CAN transceiver) — **note this is a UART connection to the CAN transceiver's RXD/TXD pins**, i.e. U7 is doing UART-framed CAN, standard for this transceiver family
-- **28 GPIOs currently marked no-connect** (this session): pins 4,5,6,7,8,9,10,11,15,18,19,20,21,22,23,24,25,26,28,29,30,31,32,33,34,35,38,39. All reversible — delete the flag if a pin gets a role later. GPIO45 (pin 26) is among these; its strap-voltage-selection requirement (affects VDD_SPI boot behavior) was never confirmed this project — don't assign it a function without checking that first.
-
-### 4. CAN transceiver + USB ESD
-
-**Parts**:
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| U7 | SN65HVD230 | CAN transceiver (3.3V native) | C12084 | Basic/Extended tier not confirmed live; ±16kV HBM ESD on bus pins built in — no external CAN ESD part needed |
-| C17 | 100nF | U7 VCC bypass at pin | — | generic |
-| R16 | 120Ω ±1% 1206, UNI-ROYAL 1206W4F1200T5E | CAN bus termination | C17909 | **Basic**; 1206 |
-| J6 | 2.54mm 1×2 header + shunt | Termination jumper (field-removable) | C36717 (header) / C5305 (shunt) | tier not cleanly re-verified |
-| U8 | USBLC6-2SC6 | USB D+/D- ESD array | C2827654 | SOT-23-6; wired as a parallel stub this session, prefer true series insertion on recapture |
-
-**Wiring**:
-- `U7:3` (VCC) ← `3V3_A`, decoupled by `C17` (100nF) directly at the pin; `U7:2/8` (GND) → `GND_A`
-- `U7:1/4` (TXD/RXD) → `UART_TX_A`/`UART_RX_A` ← `U1:37/36`
-- `U7:6/7` (CANL/CANH) → nets **`CAN_L`**/**`CAN_H`** → `J5:4/3` (field-wireable terminal). **No external CAN ESD diode** — the SN65HVD230 has ±16kV HBM ESD on its bus pins built in (D6 dropped this pass).
-- `R16` sits across `CAN_H`↔`CAN_L` in series with `J6` (2-pin jumper) — pull the jumper to remove termination in the field if ORC isn't the end-of-bus node. `R16:1` on `CAN_H`, `R16:2` on net **`TERM_MID`**, `J6:1` on `TERM_MID`, `J6:2` on `CAN_L` — i.e. the resistor+jumper are in series between the two CAN lines, not in parallel with each other.
-- `U7:5` (Vref) — no-connect, standard practice when nothing else on the bus needs the reference
-- `U8` (USBLC6-2SC6): `U8:1/3` already on `USB_DP`/`USB_DM` (paralleling J1↔U1's direct connection); `U8:2/5` (GND/VBUS-side) on `GND_A`/`VIN_BUCK_A`. **This session added `U8:6`/`U8:4` (the array's other-side I/O pins) onto the same `USB_DP`/`USB_DM` nets as a parallel stub** — electrically active, but a from-scratch capture would more typically insert U8 *in series* (J1 → U8 → U1), cutting the direct J1–U1 wire and routing through the ESD array. Worth doing properly if recapturing this block.
+- **Catch diode value — resolved 2026-08-01: SS34 (C8678) is correct.** Root schematic's D2/D3 still show "SS56" (stale, predates the correction) — harmless since root is legacy and not sourced from, but don't let it confuse a future read of root.
+- **D1 (SMBJ26CA, load-dump TVS) is still placed in root** even though the design decision to drop it was made and documented — the symbol was never deleted. Low priority since root is legacy, but noted so it isn't mistaken for a live requirement if root gets referenced.
+- **Root's `J2` symbol carries "(C2827883)" embedded in its description field** — an LCSC-shaped number that was never carried into a BOM's LCSC column and never went through a documented Gate 1 pass. Don't treat it as sourced; if J2/J6's real DORABO DB128L-5.08-4P-GN-S terminal ever needs re-verifying, start fresh rather than assuming C2827883 is right.
+- **Root has a stray `R4 22kΩ`** with no documented function anywhere in current or historical BOM content. Possibly a leftover from the dropped TVS/load-dump analysis network. Needs a function check before it's either sourced or written off as dead.
+- **PCB is significantly out of sync with the current schematic** (checked 2026-08-01): the entire Power Side B subcircuit (U10/R26/L4/R27/D6) is placed in the schematic but absent from the PCB; U7 (ESP32) and U9 (ADuM1250) are also missing from the PCB despite their support passives being placed. What *is* on the PCB uses stale ref numbers from before the last schematic re-annotation (`U3`→`U8`, `R18`/`R19`→`R24`/`R25` are the same physical parts). Needs a `pcb_sync_from_schematic` pass once the schematic itself is further along — resyncing now would just need to happen again.
+- **Still unresolved from the prior pass**: SW1 (MCU sheet, tactile switch — no documented function), J5 (Communications, 2-pin header — unclear role), R13 (Communications, 10kΩ 0.1% — unclear role), and a bare `GND` power symbol on the MCU sheet where everywhere else uses `GND_A` specifically.
 
 ---
 
-## Barrier — ADuM1250 isolated I2C (U2)
+## Power Side A — `power_side_a.kicad_sch`
 
-**Purpose**: the entire galvanic isolation between Domain A and Domain B collapses to this one 2-channel isolated I2C buffer. Nothing else crosses the barrier — deliberately (see circuit-draft.md's "fault/interrupt line: poll, don't add a channel" note; if you're tempted to add a second isolated signal, that's a topology decision, flag it, don't just wire it).
+**Purpose**: Domain A buck regulator, VIN → 3V3_A.
 
-**Parts**:
+**Parts placed today**:
 
-| Ref | Value / part | Function | LCSC | Notes |
+| Ref | Value / part | Function | LCSC | Status |
 |---|---|---|---|---|
-| U2 | ADuM1250ARZ-RL7 | 2-channel isolated I2C buffer (the entire A↔B barrier) | C13839 | isolation-voltage/data-rate not re-verified against ADI Rev. L |
-| C9, C10 | 0.1µF ×2 | Primary/secondary-side decoupling | — | generic 0603 |
-| R7, R8 | 10kΩ ±1% 0603 ×2, UNI-ROYAL | SDA_A/SCL_A pull-ups to 3V3_A | C25804 | |
-| R9, R10 | 10kΩ ±1% 0603 ×2, UNI-ROYAL | SDA_B/SCL_B pull-ups to 3V3_B | C25804 | |
+| U8 | LM2596S-ADJ | Buck regulator | C963385 | ✅ TO-263, adjustable, 3A, Vin 4.5–40V |
+| L3 | **68µH, SXN SMDRI127-680MT** | Buck inductor | C9907 | ✅ sourced live 2026-08-01, replacing an earlier KOHERelec pick that had only 194 units in stock. 49,310 in stock, Basic tier, 4A Isat/2.1A rated (3×+ margin over the 0.67A load), DCR 140mΩ, 12.3×12.3×8mm. **Open**: automotive/extended-temp rating not stated on the listing. **Pending edit**: sheet currently shows this part placed at 15µH (an unintended template placeholder, confirmed) — value and footprint both need updating in KiCad. |
+| D5 | SS34, MDD (Microdiode Semiconductor) | Catch diode | C8678 | ✅ 40V/3A Schottky, SMA(DO-214AC), Basic, 2.37M in stock. Meets the ≥36V requirement (1.25×28.8V) with the exact TI Fig 9-13 bracket part. |
+| R24 | 1.2kΩ ±1% 0603, UNI-ROYAL | FB divider, bottom | C22765 | ✅ Basic |
+| R25 | 2.0kΩ ±1% 0603, UNI-ROYAL | FB divider, top | C22975 | ✅ Basic |
 
-**Wiring**:
-- Primary (Domain A) side: `U2:1` ← `3V3_A`, `U2:4` → `GND_A`, `U2:2`/`U2:3` = `SDA_A`/`SCL_A` (pulled up by R7/R8 to 3V3_A)
-- Secondary (Domain B) side: `U2:8` ← `3V3_B`, `U2:5` → **`GND_B`** (this is the pin the GND2-not-grounded ERC warning was about — fixed this session by adding an actual `power:GND` symbol renamed to `GND_B`, not just relying on the label), `U2:6`/`U2:7` = `SCL_B`/`SDA_B` (pulled up by R9/R10 to 3V3_B)
+**Not yet migrated from legacy root**: CIN bulk caps (47µF/63V ×2, C3274436), CIN ceramic bypass (1µF/100V X7R, C13832), COUT bulk cap (220µF/35V, C5243827) and its ceramic bypass (1µF/50V X7R, C28323). Without these the sheet has the feedback/switching side wired but no bulk input/output capacitance — expected mid-capture, flagging so it isn't mistaken for finished.
+
+**Wiring**: `VIN_BUCK_A` → U8 Vin, switch node = `SW_A` → L3 → `3V3_A` output; D5 catch diode on `SW_A`↔`GND_A`; FB divider `3V3_A` → R25 → `FB_A` → U8 FB, R24 → `GND_A`. Vout = 1.23×(1+2000/1200) = **3.28V**.
 
 ---
 
-## Domain B (chassis-referenced ground) — coil drive
+## Power Side B — `power_side_b.kicad_sch`
 
-### 5. Power ingress (Q2, F2)
+**Purpose**: Domain B (coil-drive) buck regulator, V_COIL_IN → COIL_9V.
 
-Mirrors block 1's reverse-polarity protection, but simpler — no source-select needed since Domain B only has one power path (the harness A+ tap).
+**Parts placed today**:
 
-**Parts**:
-
-| Ref | Value / part | Function | LCSC | Notes |
+| Ref | Value / part | Function | LCSC | Status |
 |---|---|---|---|---|
-| F2 | 0.75A PTC, Littelfuse-class | Domain B input resettable fuse | C207083 | same line as F1; verify 85°C derating |
-| Q2 | AO3401A (placeholder) | Reverse-polarity FET, Domain B | C15127 | undersized for sustained coil current; needs a DPAK/SO-8 automotive P-ch |
-| R11 | 10kΩ ±1% 0603, UNI-ROYAL | Q2 gate bias | C25804 | |
-| C20 | 1µF/100V | V_COIL_IN bypass | — | generic, not individually sourced |
+| U10 | LM2596S-ADJ | Buck regulator | C963385 | ✅ same line as U8 |
+| L4 | **68µH, SXN SMDRI127-680MT** | Buck inductor | C9907 | ✅ same part as L3 — see L3's line for full sourcing detail. Same pending edit: currently placed at 15µH, needs correcting. |
+| D6 | SS34, MDD | Catch diode | C8678 | ✅ same part as D5; also the flyback-diode candidate if ORC ever needs to supply one for the relay board (see harness section below) |
+| R26 | 7.5kΩ ±1% 0603, UNI-ROYAL | FB divider, top | C23234 | ✅ Basic |
+| R27 | 1.2kΩ ±1% 0603, UNI-ROYAL | FB divider, bottom | C22765 | ✅ same part as R24 |
 
-**Wiring**:
-- `J2:2` (harness A+) → `F2:1` → `F2:2` = net **`VEH_RAIL_B`** → `Q2:2` (drain)
-- `Q2:1` (gate) ← `R11` bias from `Q2_GATE` net; `Q2:3` (source) → net **`V_COIL_IN`** — this is Domain B's actual Vin node, feeding U4's buck directly
-- **`Q2` is a known-undersized placeholder** (AO3401A, ~1-2A SOT-23) for sustained full-coil current — real part selection (DPAK/SO-8 automotive P-ch) is still open, per BOM.
+**Not yet migrated**: same gap as Power Side A — CIN/COUT bulk caps + bypass, plus the feedforward cap (1000pF/1nF C0G 0805, Fenghua 0805CG102J500NT, C29925 — TI Table 9-6 lists this at the 9V row despite the >10V prose rule).
 
-### 6. Domain B buck (U4) — V_COIL_IN → COIL_9V
-
-Structurally identical to block 2 (same IC, same topology), different output voltage and one extra part (CFF).
-
-**Parts**:
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| U4 | LM2596S-ADJ | Coil buck, V_COIL_IN → COIL_9V (≤32V in) | C963385 | same part/line as U3 |
-| L2 | 68µH, KOHERelec MDA1870-680M | Buck inductor | C3015595 | same part as L1 |
-| D5 | SS34, MDD | Catch diode | C8678 | same part as D3; also the flyback-diode candidate if the relay board needs one |
-| C11, C11B | 47µF/63V ×2, Nichicon PCR1J470MCL1GS | CIN bulk (parallel, ~94µF) | C3274436 | same part as C1/C1B |
-| C12 | 220µF/35V, NJCON 2210350810R00 | COUT bulk | C5243827 | same part as C2 |
-| C13 | 1µF/100V X7R, Samsung CL31B105KCHNNNE | CIN ceramic bypass | C13832 | same part as C3 |
-| C18 | 1000pF (1nF) C0G 0805, Fenghua 0805CG102J500NT | Feedforward cap (CFF) | C29925 | TI Table 9-6 lists CFF at the 9V row |
-| R12 | 7.5kΩ ±1% 0603, UNI-ROYAL 0603WAF7501T5E | FB divider, top | C23234 | **Basic**; 0603 (was 0805 C17807) |
-| R13 | 1.2kΩ ±1% 0603, UNI-ROYAL 0603WAF1201T5E | FB divider, bottom | C22765 | **Basic**; 0603 to match R3 (was 0805 C17379) |
-
-FB divider sets Vout = 1.23 × (1 + 7.5k/1.2k) = **8.92V**. CFF (C18) is present on this instance per TI's Table 9-6, unlike the 3.3V buck.
-
-**Wiring**:
-- `V_COIL_IN` → `U4:1`/`U4:5` (Vin/ON-OFF), `C11:1`/`C11B:1` (CIN), `C13:1` (CIN bypass)
-- `U4:2` (switch node) = net **`SW_B`** → `L2:1`; `D5:2` on `SW_B`
-- `L2:2` → net **`COIL_9V`** (the 9V rail feeding all ten coil drivers) → `C12` (COUT)
-- FB divider: `COIL_9V` → `R12:1`, `R12:2`/`R13:1` = net **`FB_B`** → `U4:4`, `R13:2` → `GND_B`. `C18` (CFF) bridges `FB_B` → `COIL_9V` (feedforward, per TI's Table 9-6 recommendation at the 9V row)
-- `U4:3` (GND), `D5:1` (catch diode anode) → `GND_B`
-
-### 7. Domain B logic supply (U6) — COIL_9V → 3V3_B
-
-**Parts**:
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| U6 | AMS1117-3.3 | Domain B logic LDO, 9V → 3.3V | — | never individually sourced; needs a Gate 1 pass (SOT-223) |
-| C14, C15 | 10µF ×2 | LDO in/out | — | generic |
-
-**Wiring**: `U6:1` ← `COIL_9V`, `U6:3` → `GND_B`, `U6:2` → net **`3V3_B`**, decoupled by `C14`/`C15` (in/out). Feeds U5 and the ADuM1250's secondary side (block, above) — nothing else.
-
-### 8. PCA9555 I2C GPIO expander (U5)
-
-**Parts**:
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| U5 | PCA9555PW | I2C GPIO expander, addr 0x20, 10-of-16 I/O used | — | prior LCSC number doesn't match LCSC's format; re-pull before ordering |
-| C16 | 0.1µF | U5 decoupling | — | generic |
-
-**Wiring**: `U5:24` ← `3V3_B` (decoupled by C16), `U5:12`/`U5:2`/`U5:21`/`U5:3` → `GND_B` (multiple ground pins, standard for this TSSOP-24 part), `U5:22`/`U5:23` = `SCL_B`/`SDA_B`. Ten I/O pins used (`U5:4` through `U5:14`, the `GPIO_CHn` nets below); `~INT` (`U5:1`) and 6 further I/O pins (`U5:15`–`U5:20`, i.e. `IO1_2`–`IO1_7`) are marked no-connect — the design polls over I2C rather than using the interrupt pin (see circuit-draft.md's "fault/interrupt line" note), and only 10 of 16 I/O are needed for 10 channels.
-
-### 9. Per-channel coil driver (×10, identical stage repeated)
-
-**Parts** (per stage, ×10 — refs suffixed 1 through 10):
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| RBn | 10kΩ ±1% 0603, UNI-ROYAL | PCA9555 output → NPN base | C25804 | ×10 |
-| QNn | MMBT2222A | Level-shift NPN | — | ×10; not yet re-verified on live catalog |
-| RPn | 10kΩ ±1% 0603, UNI-ROYAL | Gate pull-up to V_COIL_IN | C25804 | ×10 |
-| QPn | AO3401A | High-side coil switch | C15127 | ×10; same LCSC line as Q1/Q3, separate BOM quantity |
-
-**One stage, channel `n` (1–10)**:
-```
-U5:pin(GPIO_CHn) ──RBn(10k)── QNn:1(base)
-                              QNn:2(collector) ── GND_B  [common return]
-                              QNn:3(emitter) ── GATEn net ── RPn(10k, pull-up)── V_COIL_IN
-                                                          └── QPn:1(gate)
-QPn:2(source) ── V_COIL_IN                    QPn:3(drain) ── COILn net ── J2:pin(n+2)
-```
-- PCA9555 output pin (open-drain-ish per the part, but driven by U5) pulls `RBn`→`QNn` base low to switch the channel on
-- `QNn` (NPN, MMBT2222A) — when driven, its collector (on `GND_B`... wait, actually check per your capture: **collector connects to GND_B, emitter drives the gate net** — level-shifts the PCA9555's 3.3V logic down to pull `QPn`'s gate toward GND_B, turning the high-side P-FET on
-- `RPn` holds `QPn`'s gate at `V_COIL_IN` (off) by default
-- `QPn` (AO3401A, high-side) switches `V_COIL_IN` (~9V) onto the coil, net **`COILn`**, which goes straight to the harness pin
-
-**Exact net names, all 10 channels** (for cross-checking a from-scratch capture): `GPIO_CH1`..`GPIO_CH10` (U5 pin → RBn), `BASE1`..`BASE10` (RBn → QNn base), `GATE1`..`GATE10` (QNn emitter / QPn gate / RPn), `COIL1`..`COIL10` (QPn drain → J2).
-
-### 10. Harness connector (J2)
-
-**Parts**:
-
-| Ref | Value / part | Function | LCSC | Notes |
-|---|---|---|---|---|
-| J2 | ZHOURI 2.54mm 1×40 breakable strip (snap to 14 pos) | Harness to relay board | C2977586 | pitch/pin-count/pinout confirmed and locked |
-
-**Pinout** (14 positions, 0.1" pitch, confirmed per design-inputs.md):
-
-| Pin | Net | Notes |
-|---|---|---|
-| 1 | `GND_B` | Coil common return |
-| 2 | `VEH_RAIL_B_IN` (→ F2 → `VEH_RAIL_B`) | A+, harness-carried |
-| 3–12 | `COIL1`–`COIL10` | One per channel |
-| 13, 14 | `GND_B` | Chassis (relay-board side) — tied to the same net as pin 1 per design-inputs.md's explicit "no special handling needed" call |
+**Wiring**: `V_COIL_IN` → U10 Vin, switch node `SW_B` → L4 → `COIL_9V`; D6 on `SW_B`↔`GND_B`; FB divider `COIL_9V` → R26 → `FB_B` → U10 FB, R27 → `GND_B`. Vout = 1.23×(1+7500/1200) = **8.92V**.
 
 ---
 
-## Quick net-name index
+## MCU — `mcu.kicad_sch`
 
-For grep-ability when cross-checking a recapture against this doc:
+**Purpose**: ESP32-S3 core, plus one new part not previously documented.
 
-`VEH_RAIL_A`, `VEH_RAIL_A_IN`, `V_PROT_A`, `Q1_GATE`, `Q3_GATE`, `Q4_BASE`, `Q4_COL`, `Q5_BASE`, `VIN_BUCK_A`, `SW_A`, `3V3_A`, `FB_A`, `GND_A`, `EN_A`, `GPIO0_A`, `GPIO46_A`, `USB_DP`, `USB_DM`, `SDA_A`, `SCL_A`, `UART_RX_A`, `UART_TX_A`, `CAN_H`, `CAN_L`, `TERM_MID`, `3V3_B`, `SDA_B`, `SCL_B`, `VEH_RAIL_B`, `VEH_RAIL_B_IN`, `Q2_GATE`, `V_COIL_IN`, `SW_B`, `COIL_9V`, `FB_B`, `GND_B`, `GPIO_CH1`–`GPIO_CH10`, `BASE1`–`BASE10`, `GATE1`–`GATE10`, `COIL1`–`COIL10`.
+**Parts placed today**:
+
+| Ref | Value / part | Function | LCSC | Status |
+|---|---|---|---|---|
+| U7 | ESP32-S3-WROOM-1**U**-N8 | MCU, external antenna | — | 🔧 schematic symbol's assigned footprint is the generic non-U (onboard PCB antenna) variant — needs the real -1U footprint (external antenna; the U.FL launch area needs its own keepout, checked against the module datasheet's Fig. 10) before layout. Also re-confirm -N8 = 8MB flash/no PSRAM against Espressif's literal ordering table (not yet re-confirmed). |
+| C14 | 10µF/25V, Samsung | 3.3V entrance decoupling | C96446 | ✅ JLC Basic |
+| C15 | 10µF/25V, Samsung | EN RC cap (or entrance dup — verify which) | C96446 | ✅ same part as C14 |
+| C16 | 0.1µF/50V, Samsung | 3V3-pin decoupling | C14663 | ✅ JLC Basic |
+| R15 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull (verify which — 3 identical parts placed, function not distinguished in the pulled data) | C25804 | ⚠️ part confirmed, exact net assignment not individually re-verified |
+| R16 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull | C25804 | ⚠️ same caveat |
+| R17 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull | C25804 | ⚠️ same caveat |
+| SW1 | TS-1187A-B-A-B (tactile switch) | **New — no prior documentation.** Likely reset or boot-mode button. | — | ❌ needs a one-line function spec (what net, what purpose) before it's worth a Gate 1 pass |
+
+**Nets present**: `EN_A`, `GPIO0_A`, `GPIO46_A`, `SCL_A`, `SDA_A`, `UART_RX_A`, `UART_TX_A`, `USB_N`, `USB_P` (renamed from `USB_DM`/`USB_DP` — same signals). Plus a bare `GND` power symbol near SW1 — inconsistent with every other Domain A ground reference (`GND_A`), see Housekeeping above.
+
+**Open items**:
+- SW1's function and net — real gap, see table.
+- R15/R16/R17's exact roles (EN pull-up / GPIO0 pull-up / GPIO46 pull-down) not individually confirmed from position alone.
+- 28-GPIO no-connect marking carried from legacy root (pins 4,5,6,7,8,9,10,11,15,18,19,20,21,22,23,24,25,26,28,29,30,31,32,33,34,35,38,39, all reversible) hasn't been re-verified as present on this sheet's U7 instance.
+
+---
+
+## Communications — `communications.kicad_sch`
+
+**Purpose**: USB-C connector, CAN transceiver, CAN termination, and USB ESD protection — combines the old ingress and CAN/ESD blocks into one sheet.
+
+**Parts placed today**:
+
+| Ref | Value / part | Function | LCSC | Status |
+|---|---|---|---|---|
+| J4 | USB-C receptacle, Hroparts TYPE-C-31-M-12 | USB-C VBUS/data ingress | C165948 | ⚠️ Basic/Extended tier not confirmed live |
+| R11 | 5.1kΩ ±0.1%, 0402 | **USB-C CC1 Rd pull-down — closes a previously-flagged open item** (USB-C spec requires this for the port to be recognized by a host at all) | — | ⚠️ not yet sourced. 0.1% tolerance in 0402 is a tighter/pricier spec than the board's usual 1% 0603 default — worth a dedicated Gate 1 pass |
+| R12 | 5.1kΩ ±0.1%, 0402 | USB-C CC2 Rd pull-down (pair with R11) | — | ⚠️ same as R11 |
+| J5 | 01x02 header | Unclear function — doesn't match any legacy-root part at this position | — | ❌ needs a label/purpose check before sourcing |
+| J6 | 5.08mm screw terminal, 4-pos | DC + CAN field terminal | — | 🔧 old part was DORABO DB128L-5.08-4P-GN-S (right-angle, chosen after two push-in-spring candidates failed the wire-entry/actuator requirement) — confirm this footprint actually matches; don't reuse the stray "C2827883" number from root (see Housekeeping) |
+| U6 | SN65HVD230 | CAN transceiver, 3.3V native | C12084 | ⚠️ Basic/Extended tier not independently confirmed live. ±16kV HBM ESD on bus pins built in — no external CAN ESD part needed |
+| U5 | USBLC6-2SC6 | USB D+/D- ESD array | C2827654 | ⚠️ SOT-23-6, Extended tier verified live. Check series-vs-parallel insertion (legacy root wired it as a parallel stub, not true series — worth doing properly on this fresh capture) |
+| C13 | 100nF | U6 VCC bypass, at the pin | — | ⚠️ generic |
+| R13 | 10kΩ ±0.1% | Unclear function — doesn't match any known legacy-block role; nothing else on this design uses 0.1% except R11/R12 (which are 5.1k, not 10k) | — | ❌ flag for a wiring check, don't assume it's a stray |
+| R14 | 120Ω ±1% 1206, UNI-ROYAL | CAN bus termination | C17909 | ✅ Basic |
+
+**Nets present**: `CAN_H`, `CAN_L`, `UART_RX_A`, `UART_TX_A`, `USB_N`, `USB_P`.
+
+**Not yet migrated from legacy root**: the reverse-polarity/source-select stage (Domain A power ingress — reverse-polarity FET, USB-presence-detect gate drive, PTC fuse) doesn't appear on Communications, Power Side A, or any other new sheet yet — still only in root. Given J4 already lives here, this stage likely belongs on Communications too, but that's an open placement call. **This stage is also known-electrically-incomplete even in legacy root** — a single NPN pulling toward GND can't turn a high-side P-FET off; the gate-drive chain (root's Q4/Q5-equivalent) likely needs a second stage properly derived before it's worth recapturing as-is.
+
+Also not yet migrated: the CAN termination jumper (2.54mm header+shunt, C36717/C5305, field-removable) — confirm whether R14's termination is now hardwired or the jumper just isn't placed yet.
+
+---
+
+## I2C Isolator — `i2c_isolator.kicad_sch`
+
+**Purpose**: the entire Domain A↔B galvanic isolation barrier.
+
+**Parts placed today**:
+
+| Ref | Value / part | Function | LCSC | Status |
+|---|---|---|---|---|
+| U9 | ADuM1250ARZ-RL7 | 2-channel isolated I2C buffer — the entire A↔B barrier | C13839 | ✅ part confirmed; isolation-voltage/data-rate figures not re-verified against ADI's Rev. L table |
+| C17 | 100nF | Primary-side decoupling | — | ⚠️ generic 0603 |
+| C18 | 100nF | Secondary-side decoupling | — | ⚠️ generic 0603 |
+| R20 | 10kΩ ±1% 0603, UNI-ROYAL | SDA_A pull-up | C25804 | ✅ |
+| R21 | 10kΩ ±1% 0603, UNI-ROYAL | SCL_A pull-up | C25804 | ✅ |
+| R22 | 10kΩ ±1% 0603, UNI-ROYAL | SDA_B pull-up | C25804 | ✅ |
+| R23 | 10kΩ ±1% 0603, UNI-ROYAL | SCL_B pull-up | C25804 | ✅ |
+
+**Nets present**: `SCL_A`, `SCL_B`, `SDA_A`, `SDA_B`, plus power symbols `+3V3_A`/`GND_A` (primary side) and `+3V3_B`/`GND_B` (secondary side).
+
+**Not yet migrated**: nothing obvious — this reads as a complete, self-contained migration of the old barrier block. Worth a `run_erc` pass specifically on this sheet to confirm.
+
+**Nothing else crosses the barrier, deliberately** — if there's ever a temptation to add a second isolated signal (e.g. a fault/interrupt line), that's a topology decision to flag, not just wire. The design polls status over the existing I2C link instead.
+
+---
+
+## Not yet captured into any sheet — still legacy-root-only
+
+Whoever captures these next should give them their own sheet(s), following the same one-function-per-sheet pattern above. No names are reserved — that's an open call for whoever does the capture.
+
+### Domain B power ingress
+
+| Ref (legacy) | Value / part | Function | LCSC | Status |
+|---|---|---|---|---|
+| F2 | 0.75A PTC, Littelfuse-class | Domain B input resettable fuse | C207083 | ⚠️ **check 85°C-derated hold current against the actual load before trusting this as protection** — a prior PTC selection pass on this exact project already caught one part (2920L075/60) that derates to 0.34A at 85°C, below its intended load. Confirm this part's derating table directly. |
+| F1 | 0.75A PTC, Littelfuse-class | Domain A input resettable fuse | C207083 | ⚠️ same part/caveat as F2 |
+| Q2 | **DMP4015SK3Q-13** (Diodes Inc.) | Domain B reverse-polarity FET — replaces an undersized SOT-23 AO3401A placeholder | C461089 | ⚠️ sourced live 2026-08-01: TO-252 (DPAK), P-ch, Vds -40V (25% margin over 32V worst-case input), Id -35A (50× the ~0.7A load), Rds(on) 7mΩ@10V/9mΩ@4.5V, **AEC-Q101 qualified**, 1,544 in stock. Clears every requirement with large margin — spec confidence High. **Tier not confirmed**: stock depth/price suggest Extended, not independently confirmed. **This is a package change from the placeholder (TO-252 vs SOT-23), not just a value swap — needs a new footprint, not a property edit.** |
+
+### Domain B logic supply
+
+| Ref (legacy) | Value / part | Function | LCSC | Status |
+|---|---|---|---|---|
+| U6 | AMS1117-3.3 | Domain B logic LDO, COIL_9V → 3.3V | — | ❌ never individually sourced — needs its own Gate 1 pass (package: SOT-223) |
+| C14/C15 (legacy refs) | 10µF ×2 | LDO in/out | — | ⚠️ generic |
+
+### PCA9555 I2C GPIO expander
+
+| Ref (legacy) | Value / part | Function | LCSC | Status |
+|---|---|---|---|---|
+| U5 (legacy ref) | PCA9555PW,118 (NXP) | I2C GPIO expander, addr 0x20, 10-of-16 I/O used | C128392 | ⚠️ re-pulled live 2026-08-01, 8,773 in stock, TSSOP-24. Basic/Extended tier not confirmed (badge didn't render to automated fetch). **Temp margin thin**: datasheet rated −40 to +85°C against this enclosure's 65–85°C ambient — near-zero headroom for self-heating above bulk ambient, same class of concern as the PTC 85°C-derating finding. Address 0x20 is set by A0–A2 board strapping, not part-number-specific. |
+| C16 (legacy ref) | 0.1µF | Decoupling | — | ⚠️ generic |
+
+### Per-channel coil driver ×10 (channels 1–10)
+
+Identical stage repeated for each relay channel: `RBn` (PCA9555 output → NPN base) → `QNn` (level-shift NPN) → `RPn` (gate pull-up) → `QPn` (high-side coil switch) → harness pin `n+2`.
+
+| Ref | Value / part | Function | LCSC | Status |
+|---|---|---|---|---|
+| RB1–RB10 | 10kΩ ×10 | PCA9555 output → NPN base | — | ⚠️ generic 0603 |
+| QN1–QN10 | **MMBT3904** (JSCJ) | Level-shift NPN | C20526 | ✅ **decided 2026-08-01** — Basic-tier preference over the literal MMBT2222A (which didn't appear on JLCPCB's Basic-parts lists). 253,450 in stock. Functionally interchangeable for this role (3.3V I2C-expander output → 10k base, no high-current/high-freq need). |
+| RP1–RP10 | 10kΩ ×10 | Gate pull-up to V_COIL_IN | — | ⚠️ generic 0603 |
+| QP1–QP10 | AO3401A ×10 | High-side coil switch | C15127 | ✅ re-verified live 2026-08-01: 186,375 in stock, $0.10/pc single-unit. **Tier caveat applies to every C15127 line in this doc** (this bank plus the Domain A reverse-polarity/source-select FETs once migrated): LCSC's page shows no Basic/Extended badge, JLCPCB's own page didn't render one either — circumstantially Basic per third-party list cross-check, not a direct-page confirmation. |
+
+**Open, design-level item**: flyback diode presence on the *relay board itself* is still unconfirmed — needs bench inspection or a continuity/diode check across a coil's harness pins. If ORC needs to supply flyback diodes per channel, reuse SS34 (C8678, already qualified, same part as D5/D6) — 40V/3A is far more than the ~9V/45mA-per-coil duty needs.
+
+### Harness connector
+
+| Ref | Value / part | Function | LCSC | Status |
+|---|---|---|---|---|
+| J2/J3 (legacy refs) | ZHOURI 2.54mm 1×40 breakable strip (snap to 14 pos) | Harness to relay board | C2977586 | ✅ pitch/pin-count/pinout confirmed and locked, per design-inputs.md |
+
+**Pinout** (14 positions, 0.1" pitch): pin 1 = `GND_B` (coil common return), pin 2 = `VEH_RAIL_B_IN` (A+, harness-carried, → F2 → `VEH_RAIL_B`), pins 3–12 = `COIL1`–`COIL10`, pins 13/14 = `GND_B` (chassis side, tied to the same net as pin 1 per design-inputs.md's explicit call).
+
+### Power flags (schematic-only, not orderable)
+
+PF1, PF3, PF5, PF6, PF7, PF8 — `power:PWR_FLAG`, 6×, ERC bookkeeping only. Each instance's Value field was renamed (PWR_FLAG1..PWR_FLAG8) to prevent them silently sharing one net by symbol identity — see kicad-mcp-logbook.md's 2026-08-01 entries if the reason isn't obvious from context.
+
+---
+
+## Section 🔧 — needs real KiCad symbol/footprint work, not a sourcing gap
+
+- **U1/U7 — ESP32-S3-WROOM-1U footprint.** See MCU sheet above.
+- **J5/J6 — DORABO DB128L-5.08-4P-GN-S.** Right-angle 5.08mm screw terminal, mechanically specific (chosen after two push-in-spring candidates failed the wire-entry/actuator requirement). Verify KiCad's connector footprint libraries have a matching right-angle 5.08mm 4-pos footprint, or build one from DORABO's datasheet drawing.
+- **F1, F2 — PTC fuse footprint.** Confirm the placed footprint actually matches C207083's real SMD 2-pad package, not a generic fuse symbol's default footprint.
+- **Q2 — Domain B reverse-polarity FET footprint.** TO-252/DPAK, not the SOT-23 the placeholder used — real footprint swap, not just a value edit.
+- **All ~35 generic-value passives** (10k resistors, 0.1µF/1µF ceramic caps for decoupling/bias/pull-ups) use KiCad's standard `Device:R`/`Device:C` symbols with standard footprints — no custom KiCad work, just a Gate 1 distributor pull once ready to lock values.
+
+## Quick net-name index (legacy root — not yet re-verified against the new sheets)
+
+Carried forward for whoever migrates the remaining blocks; net names inside the 5 sheets above have already been re-pulled live and may not match these 1:1 (e.g. `USB_DM`/`USB_DP` became `USB_N`/`USB_P` during migration):
+
+`VEH_RAIL_A`, `VEH_RAIL_A_IN`, `V_PROT_A`, `Q1_GATE`, `Q3_GATE`, `Q4_BASE`, `Q4_COL`, `Q5_BASE`, `VIN_BUCK_A`, `VEH_RAIL_B`, `VEH_RAIL_B_IN`, `Q2_GATE`, `V_COIL_IN`, `GPIO_CH1`–`GPIO_CH10`, `BASE1`–`BASE10`, `GATE1`–`GATE10`, `COIL1`–`COIL10`.
