@@ -227,6 +227,21 @@ Separate task, run per `.claude/firmware-io-verification-prompt.md`: verify the 
 
 **What was deliberately not done**: no relay control logic, no real CAN message handling, no application firmware — out of scope per the task. No `hardware/*.kicad_sch` or PCB edits — firmware-only task, and the pinout didn't need to change anyway since the strapping question resolved as safe.
 
+## 2026-08-01 — real ESP32-C3 dev kit connected: ran the bring-up sketches live, found and fixed a real console/UART-pin collision
+
+Same session as the `firmware/` creation above. User had a bare, generic ESP32-C3 dev kit connected to the machine (nothing else wired to it — no PCA9555, no SN65HVD230). Not ORC's board, doesn't exercise the PCA9555 or CAN-transceiver logic, but exercises the ESP32-C3 IO-level pieces on real silicon rather than just a simulator/compiler.
+
+**Found PlatformIO CLI** at `~/.platformio/penv/Scripts/pio.exe` (installed but not on `PATH`). Device enumerated as `COM4` (VID 303A = Espressif). `esptool` identified it during flashing: **ESP32-C3 (QFN32), silicon revision v0.4**, 4MB embedded flash (XMC), native USB-Serial/JTAG, MAC `3c:84:27:af:48:fc`.
+
+**Real bug found and fixed, not cosmetic**: flashed `i2c_scanner` first — zero console output over USB. Root cause: the stock `esp32-c3-devkitm-1` PlatformIO board definition doesn't set `ARDUINO_USB_CDC_ON_BOOT`, so Arduino's default `Serial` object bound to UART0 on **GPIO21(TX)/GPIO20(RX) — the same pins this design assigns to the CAN-transceiver UART** — instead of the native USB port. Console output was going out a physical GPIO pin wired to nothing, not over USB. Fixed by adding `-D ARDUINO_USB_MODE=1 -D ARDUINO_USB_CDC_ON_BOOT=1` to `firmware/platformio.ini`'s `[env]` build_flags, which routes `Serial` onto native USB and frees GPIO21/20 exclusively for the CAN UART (`Serial1`) as the design intends. Documented in `firmware/README.md` — this is a real thing to carry forward into whichever final board definition replaces the `esp32-c3-devkitm-1` stand-in, since the same collision would otherwise silently resurface on real hardware.
+
+**Results, after the fix**:
+- `i2c_scanner`: ran live, correctly reported no ACKs (expected — nothing wired to GPIO8/9 on this bare dev kit).
+- `uart_can_bringup`: ran live. Baseline (nothing jumpered) correctly showed no RX every cycle. User shorted GPIO21(TX) to GPIO20(RX) with a jumper wire; **loopback verified end-to-end** — every `ORC-BRINGUP-<counter>` test pattern sent came back byte-for-byte (22 bytes incl. `\r\n`), one-to-one, no drops/corruption, at 500kbps.
+- `pca9555_bringup`: not run — no PCA9555 attached to this dev kit; by design it halts cleanly at the "did not ACK" check rather than doing anything unsafe.
+
+**What this does and doesn't confirm**: confirms the ESP32-C3 I2C and UART peripherals initialize and run correctly on real silicon of the right chip family, and that the console-routing fix works. Does **not** confirm anything about ORC's actual board, the PCA9555, or the SN65HVD230 — none of those exist/are attached yet. `firmware/README.md` updated with a dedicated "Real-hardware run" section spelling out this distinction explicitly, so it doesn't get conflated with "ORC hardware verified" later.
+
 ## Earlier notes, superseded by the above (kept for history)
 
 **Two paths forward, neither attempted**: (1) find and manually inspect wire object(s) around index 302 in `orc.kicad_sch` (the wire numbering is presumably positional/sequential in the file, so a text search near a specific line range or a `sch_get_wires` dump filtered to short/coincident segments could locate the culprit) and hand-fix or delete-and-redraw whatever KiCad's own editor considers valid but this guard's parser doesn't; or (2) the error hint mentions "use an explicit destructive path only for intentional delete/replace operations" — implying kicad-mcp-pro has some override for accepting a lossy write when the loss is intentional, not yet located or tried, and not something to reach for without understanding what would actually be lost first.
