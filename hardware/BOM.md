@@ -23,7 +23,7 @@ See **[docs/subcircuit-capture-guide.md](../docs/subcircuit-capture-guide.md)** 
 | R1 | 10k | Q1 gate bias | — | ⚠️ generic 0603, not individually sourced |
 | U3 | LM2596S-ADJ | Domain A buck → 3.3V (4.5–40V in) | C963385 | ✅ TO-263 |
 | L1 | 68µH, KOHERelec MDA1870-680M | U3 inductor | C3015595 | ✅ SMD pad-mount 17.8×16.9mm; tier unmarked on fetched page, treat as Extended until verified |
-| D3 | SS56, High Diode | U3 catch diode | C466505 | ✅ 60V/5A Schottky, SMAG/SMC |
+| D3 | SS34, MDD (Microdiode Semiconductor) | U3 catch diode | C8678 | ✅ 40V/3A Schottky, SMA(DO-214AC); **Basic**, 2.37M in stock. Single board-wide diode type. Meets the ≥36V catch-diode requirement (1.25×28.8V) — 40V is the exact TI Fig 9-13 bracket part. **Caveat:** with the input TVS removed, load-dump transients >40V are now unclamped ahead of this diode. |
 | C1, C1B | 47µF/63V, Nichicon PCR1J470MCL1GS ×2 (parallel = CIN) | U3 Vin bulk | C3274436 | ✅ |
 | C2 | 220µF/35V, NJCON 2210350810R00 | U3 Vout bulk | C5243827 | ✅ (fallback: ROQANG RVT1V221M0810, C72498, wet electrolytic, deeper stock) |
 | C3 | 1µF/100V X7R, Samsung CL31B105KCHNNNE | U3 Vin ceramic bypass | C13832 | ✅ |
@@ -35,13 +35,13 @@ See **[docs/subcircuit-capture-guide.md](../docs/subcircuit-capture-guide.md)** 
 | R15 | 10k | Q4 base resistor from VIN_BUCK_A | — | ❌ same open item as Q4 |
 | U7 | SN65HVD230 | CAN transceiver, 3.3V native | C12084 | ⚠️ Basic/Extended tier not independently confirmed live |
 | C17 | 100nF | U7 VCC bypass | — | ⚠️ generic |
-| R16 | 120Ω, UNI-ROYAL 0805W8F1200T5E | CAN termination resistor | C17437 | ✅ Basic, high confidence |
+| R16 | 120Ω, UNI-ROYAL 1206W4F1200T5E | CAN termination resistor | C17909 | ✅ Basic, 1206; verified live 2026-08-01 |
 | J6 | 2.54mm 1×2 header + shunt | CAN termination jumper (field-removable) | C36717 (header) / C5305 (shunt) | ⚠️ tier not cleanly re-verified; header+shunt vs. solder-jumper mechanism not locked |
-| U8 | USBLC6-2SC6 | USB D+/D- ESD protection | C7519 | ⚠️ part-selection high confidence, tier unconfirmed. **Wired as a parallel stub onto USB_DP/USB_DM this session, not true series insertion** — see capture guide, Domain A block 4. |
-| D6 | Device:D_TVS_Dual_AAC (symbol) — real part **Nexperia PESD1CAN,215** | CAN_H/CAN_L ESD/TVS | C15771 | 🔧 **no PESD1CAN symbol in this KiCad install** — generic dual-TVS symbol standing in as a placeholder. Part-selection confidence high, tier unconfirmed. Needs a real symbol made (SOT-23, 3-pin) before this can be trusted on the schematic. |
-| C4 | 10µF | U1 main 3.3V entrance decoupling | — | ⚠️ generic, value per Espressif datasheet |
-| C5, C8 | 1µF ×2 | U1 rail decoupling / EN cap | — | ⚠️ generic |
-| C6, C7 | 0.1µF ×2 | U1 VDD3P3_CPU/VDD3P3_RTC decoupling | — | ⚠️ generic |
+| U8 | USBLC6-2SC6 | USB D+/D- ESD protection | C2827654 | ⚠️ SOT-23-6, Extended tier; verified live 2026-08-01. **Wired as a parallel stub this session, not true series insertion** — see capture guide, Domain A block 4. |
+| D6 | ~~Device:D_TVS_Dual_AAC~~ **removed** | ~~CAN_H/CAN_L ESD/TVS~~ | — | ✅ **dropped this pass** — SN65HVD230 has ±16kV HBM ESD on bus pins built in, so no external CAN ESD part is used. Delete the placed symbol from the schematic before layout. |
+| C4 | 10µF/25V, Samsung | U1 main 3.3V entrance decoupling | C96446 | ✅ JLC Basic |
+| C6 | 0.1µF/50V, Samsung | U1 3V3-pin decoupling | C14663 | ✅ JLC Basic; single 3V3 pin on the module (was C6/C7 ×2 — dropped C7, the WROOM-1U has no separate VDD3P3_RTC pin) |
+| C8 | 10µF/25V, Samsung | U1 EN RC cap | C96446 | ✅ JLC Basic; same part as C4 (was 1µF) |
 | R4 | 10k | U1 EN RC | — | ⚠️ generic |
 | R5 | 10k | U1 GPIO0 pull-up (normal boot strap) | — | ⚠️ generic |
 | R6 | 10k | U1 GPIO46 pull-down (SPI boot strap) | — | ⚠️ generic |
@@ -59,17 +59,17 @@ See **[docs/subcircuit-capture-guide.md](../docs/subcircuit-capture-guide.md)** 
 
 | Ref | Part | Function | LCSC | Status |
 |---|---|---|---|---|
-| D4 | SMBJ26CA | Load-dump TVS, 12V input | C135063 | ⚠️ **interim only** — 600W/10×1000µs generic surge rating, not a confirmed ISO 7637-2 pulse-5 load-dump rating |
+| D4 | ~~SMBJ26CA~~ **removed** | ~~Load-dump TVS, 12V input~~ | — | ✅ **dropped this pass** per design decision — 12V load-dump TVS removed. Delete the placed symbol from the schematic before layout. Note: transient/load-dump protection is now unaddressed pending an input-diode decision (see circuit-draft.md Vin-ceiling note and design-inputs.md's load-dump requirement). |
 | Q2 | AO3401A (placeholder) | Reverse-polarity FET, Domain B | C15127 | ❌ **undersized for sustained full-coil current** in a SOT-23 — needs a DPAK/SO-8-class automotive P-ch part. Real, unsourced gap. |
 | R11 | 10k | Q2 gate bias | — | ⚠️ generic 0603 |
 | U4 | LM2596S-ADJ | Coil buck → 9V (≤32V in) | C963385 | ✅ same part/line as U3 — one fewer distinct BOM entry |
 | L2 | 68µH, KOHERelec MDA1870-680M | U4 inductor | C3015595 | ✅ same part as L1 |
-| D5 | SS56, High Diode | U4 catch diode | C466505 | ✅ same part as D3; also doubles as the coil flyback diode candidate if ORC needs to supply one (see open item below) |
+| D5 | SS34, MDD (Microdiode Semiconductor) | U4 catch diode | C8678 | ✅ same part as D3; also doubles as the coil flyback diode candidate if ORC needs to supply one (see open item below) |
 | C11, C11B | 47µF/63V ×2 (parallel = CIN) | U4 Vin bulk | C3274436 | ✅ same part as C1/C1B |
 | C12 | 220µF/35V | U4 Vout bulk | C5243827 | ✅ same part as C2 |
 | C13 | 1µF/100V X7R | U4 Vin ceramic bypass | C13832 | ✅ same part as C3 |
 | C18 | 1000pF (1nF) C0G 0805, Fenghua 0805CG102J500NT | U4 feedforward cap (CFF) — TI's own Table 9-6 lists this at the 9V row despite the >10V prose rule | C29925 | ✅ |
-| R12 | 7.5k, UNI-ROYAL 0805W8F7501T5E | U4 FB divider, top | C17807 | ✅ Vout = 1.23×(1+7500/1200) = 8.92V |
+| R12 | 7.5k, UNI-ROYAL 0603WAF7501T5E | U4 FB divider, top | C23234 | ✅ Basic, 0603; Vout = 1.23×(1+7500/1200) = 8.92V (re-sourced from 0805 C17807) |
 | R13 | 1.2k | U4 FB divider, bottom | C17379 | ✅ same part as R3 |
 | U6 | AMS1117-3.3 | Domain B logic LDO, fed from COIL_9V (9V→3.3V) | — | ❌ never individually sourced — needs its own Gate 1 pass (package: SOT-223) |
 | C14, C15 | 10µF ×2 | U6 LDO in/out | — | ⚠️ generic |
@@ -90,7 +90,7 @@ Identical stage repeated for each of the 10 relay channels: `RBn` (PCA9555 outpu
 | QP1–QP10 | AO3401A ×10 | High-side coil switch | C15127 | ✅ same LCSC line as Q1/Q3 — separate BOM quantity, don't merge line items |
 | J2 | ZHOURI 2.54-1×40 (breakable strip, snap to 14 pos) | Harness to relay board — pinout measured and locked | C2977586 | ✅ pitch/pin-count/pinout confirmed |
 
-**Open, design-level (not ERC/BOM) item**: flyback diode presence on the *relay board itself* is still unconfirmed — needs bench inspection or a continuity/diode check across a coil's harness pins. If ORC needs to supply flyback diodes per channel, reuse SS56 (already qualified, same part as D3/D5) rather than sourcing new — 60V/5A is far more than the ~9V/45mA-per-coil duty needs.
+**Open, design-level (not ERC/BOM) item**: flyback diode presence on the *relay board itself* is still unconfirmed — needs bench inspection or a continuity/diode check across a coil's harness pins. If ORC needs to supply flyback diodes per channel, reuse SS34 (C8678, already qualified, same part as D3/D5) rather than sourcing new — 40V/3A is far more than the ~9V/45mA-per-coil duty needs.
 
 ## Power flags (schematic-only, not orderable)
 
@@ -100,7 +100,7 @@ PF1, PF3, PF5, PF6, PF7, PF8 — `power:PWR_FLAG`, 6× — ERC bookkeeping only,
 
 Pulled together in one place since these are blocking in a different way than a Gate 1 sourcing gap — these need library work, not a distributor search:
 
-1. **D6 — Nexperia PESD1CAN,215.** No symbol exists in this KiCad install at all. Currently standing in on a generic `Device:D_TVS_Dual_AAC` symbol. Build a real 3-pin SOT-23 symbol (datasheet: C15771) before this line can be trusted — pin mapping matters here (CAN_H/CAN_L/GND), don't guess it from the generic symbol's pin order.
+1. **~~D6 — Nexperia PESD1CAN,215.~~ Dropped this pass** — no external CAN ESD part; the SN65HVD230 has ±16kV HBM ESD on its bus pins built in. Action is now the reverse: **delete the placeholder `Device:D_TVS_Dual_AAC` symbol from the schematic** before layout, don't build a symbol for it.
 2. **U1 — ESP32-S3-WROOM-1U.** Schematic symbol is pin-compatible with the real part, but its assigned footprint is the generic non-U (onboard PCB antenna) variant. Needs the real -1U footprint (external antenna, no antenna keepout needed on this variant, but the U.FL launch area does) swapped in before layout — check if KiCad's `RF_Module` footprint library already has a -1U variant or if this needs a custom footprint pull from Espressif's own footprint files.
 3. **J5 — DORABO DB128L-5.08-4P-GN-S.** Right-angle 5.08mm screw terminal, mechanically specific (this exact part was chosen after two other push-in-spring candidates failed the "right-angle wire entry + top-accessible actuator" requirement — see circuit-draft.md). Verify KiCad's connector footprint libraries have a matching right-angle 5.08mm 4-pos footprint, or build one from DORABO's datasheet drawing directly (already have it referenced from the Gate 1 pass).
 4. **F1, F2 — PTC fuse footprint.** Confirm the placed footprint actually matches C207083's real SMD 2-pad package, not a generic fuse symbol's default footprint.
@@ -112,6 +112,6 @@ Pulled together in one place since these are blocking in a different way than a 
 - **Confirmed-sourced (✅): ~24 lines** covering both buck regulators' full passive sets (L, D, CIN, COUT, bypass, FB dividers, CFF), the AO3401A/ADuM1250/CAN-termination/harness parts.
 - **Needs a Gate 1 sourcing pass (⚠️): ~20 lines** — mostly generic-value passives (10k bias/pull-up resistors, small decoupling caps) plus J1/U7/J6/U8 which have sourcing-pass context but unconfirmed Basic/Extended tier.
 - **Real, unresolved gaps (❌): 6 items** — Q4/R15's gate-drive topology (circuit-draft.md's own flagged open item, likely electrically incomplete, not just unsourced), Q2 (known-undersized for Domain B), U5's stale LCSC number, U6 (never scoped for sourcing at all), the relay-board flyback-diode presence question, and QN1-10's live-catalog re-verification.
-- **KiCad-side work needed (🔧): 4 items**, listed above — one genuinely missing symbol (D6/PESD1CAN), one wrong footprint variant (U1), and two footprints worth double-checking before layout (J5, F1/F2).
+- **KiCad-side work needed (🔧): 3 items**, listed above — one wrong footprint variant (U1) and two footprints worth double-checking before layout (J5, F1/F2). D6 was dropped (transceiver has built-in ESD), leaving a placeholder symbol to delete rather than a symbol to build.
 
 **Bottom line for Gate 1**: still don't lock this BOM. The ❌ and 🔧 items above are the actionable checklist — everything else is either confirmed or a routine "pull the distributor page" pass on an already-decided generic passive.

@@ -661,13 +661,33 @@
         "uuid": "dfe8a5cf-95d8-40b2-99f0-435f7d912c24"
       }
     ],
-    "used_designators": "",
+    "used_designators": "D1-7,L1-4,#PWR1-34,#PWR37-44,#PWR59-60,#PWR66,#PWR116,C1-18,C21-29,RB1-10,R1-36,J1-7,U1-10,SW1,SW3,#PWRa315-316,C11B1,C1B1,F1-2,PF1-6,Q1-5,QN1-10,QP1-10,RP1-10",
     "variants": []
   },
   "sheets": [
     [
       "dfe8a5cf-95d8-40b2-99f0-435f7d912c24",
       "orc"
+    ],
+    [
+      "f79db394-df17-432c-a726-9b16ad13a4e6",
+      "Communications"
+    ],
+    [
+      "e58ed683-0af2-459e-a614-11ad8be943ea",
+      "MCU"
+    ],
+    [
+      "089bbdbc-b2e4-4793-8813-12c4f13d1267",
+      "Power Side A"
+    ],
+    [
+      "558031e1-5005-4f71-9738-42e76d65930f",
+      "I2C Isolator"
+    ],
+    [
+      "aba1bba0-b74d-454b-8f0e-c183dec674ff",
+      "Power Side B"
     ]
   ],
   "text_variables": {},
