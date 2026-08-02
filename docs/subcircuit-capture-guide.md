@@ -8,13 +8,29 @@ Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Is
 
 **Status legend** (carried from the old BOM.md): ✅ LCSC confirmed live · ⚠️ real part/value decided, tier or wiring detail still open · ❌ real unresolved gap · 🔧 KiCad-side symbol/footprint work needed, not a sourcing gap.
 
-## OPEN ARCHITECTURE DECISION — MCU module, not locked, don't source against U7/J4/U5/R11/R12 yet
+## OPEN ARCHITECTURE DECISION — MCU module, exact board TBD, don't source against U7/J4/U5/R11/R12 yet
 
-**Mechanical finding, 2026-08-01**: only ~8.5mm clearance between the two stacked PCBs in the enclosure — not enough room for both a USB-C connector and the required DC+CAN screw terminal on a single-sided board. There's a cutout in the upper board exposing ~20mm of the lower board's edge near the connector location, which could fit the screw terminal, but the USB-C receptacle's current footprint doesn't obviously coexist with it.
+**Mechanical finding, 2026-08-01**: only ~8.5mm clearance between the two stacked PCBs in the enclosure — not enough room for both a USB-C connector and the required DC+CAN screw terminal on a single-sided board.
 
-**Direction, pending research**: rather than solve the connector-placement problem, replace the bare ESP32-S3-WROOM-1U + custom USB-C/ESD/CC-pulldown circuit (U7, J4, U5, R11, R12 below) with a **complete pre-made ESP32-S3 module** that already has USB-C, ESD, and USB circuitry built in — mounted onto ORC's board rather than designed on it. **Hard requirement carried forward unchanged: external antenna (U.FL) support** — this board is in a sealed metal enclosure, PCB-trace-antenna-only modules are disqualified regardless of price. A sourcing/research pass for real candidates is in progress (2026-08-01) — **do not source or lock U7/J4/U5/R11/R12 further until that lands**; they may all get replaced by a single module part number. SW1/SW2 (EN/BOOT buttons) may also become redundant if the chosen module already has its own — don't build those into the schematic as final until the module is picked.
+**Resolved 2026-08-01 — chip family and wireless, both decided**: rather than solve the connector-placement problem, replace the bare ESP32-S3-WROOM-1U + custom USB-C/ESD/CC-pulldown circuit (U7, J4, U5, R11, R12 below) with a **complete pre-made ESP32-C3 module** ("ESP32-C3 Super Mini" class, USB-C already built in, ~$2-3/ea in bulk). Two decisions landed together:
+- **Wireless (WiFi/BLE) dropped entirely** — CAN is now the sole control path, no config/monitoring path over WiFi. This retires design-inputs.md's external-antenna requirement outright: radio is never enabled in firmware, so a sealed metal enclosure blocking a PCB-trace antenna is no longer a real constraint. The plain (non-"Plus") C3 Super Mini's PCB-only antenna is fine now.
+- **Chip family: ESP32-C3, not S3** — single-core RISC-V confirmed adequate. This board's whole job is CAN in (via the already-sourced SN65HVD230 transceiver, UART-framed) and driving the PCA9555 I2C GPIO expander out (through the ADuM1250 isolator) — light duty, doesn't need dual-core Xtensa or PSRAM.
 
-This also has a welcome side effect if it proceeds: dropping the custom USB-C ingress removes the VBUS-vs-DC-terminal source-select stage (Q1/Q3/Q4/Q5, still legacy-root-only) entirely — including Q4/Q5's gate-drive chain, which has been an unresolved electrical gap since early in the project. Domain A power ingress would simplify to just the DC terminal path, same shape as Domain B.
+**Still open**: the exact "ESP32-C3 Super Mini" board/listing — this is a widely-cloned board family sold by many sellers with inconsistent specs, not a single manufacturer's part. A sourcing pass for live pricing, confirmed flash size, pinout (I2C/UART pin availability), onboard RST/BOOT button presence, and mounting method is in progress (2026-08-01). **Don't source or lock U7/J4/U5/R11/R12 further until it lands.**
+
+<details><summary>Superseded S3-module candidate research (2026-08-01, before the wireless/chip-family decision) — kept for record, not actionable</summary>
+
+| Candidate | Antenna | USB | Flash/PSRAM | Size/mount | Buttons | Confidence |
+|---|---|---|---|---|---|---|
+| Unexpected Maker TinyS3 | ✅ Confirmed — u.FL on product page | USB-C, native | 8MB / 8MB PSRAM | 35×17.8mm, 4.3mm max thickness, pin-header pads | RESET + BOOT confirmed | High — cleared every requirement under the old (S3, external-antenna) constraints |
+| Olimex ESP32-S3-DevKit-Lipo-EA | ✅ Confirmed on manufacturer page | USB-C ×2 | 8MB / 8MB | 27.94×55.88mm | RESET + BOOT/USER | Medium-High |
+| Adafruit ESP32-S3 Feather 8MB w/ w.FL Antenna | ⚠️ w.FL/MHF3, not u.FL — pigtail mismatch | USB-C, native | 8MB / no PSRAM | Feather ~51×23mm | RESET + BOOT | Out of stock at Adafruit |
+| Espressif ESP32-S3-DevKitC-1U-N8R8 | ✅ Best-documented | ❌ Micro-USB, disqualifying | 8MB / 8MB | 70×28mm THT header | RESET + BOOT | Disqualified on USB connector |
+
+Superseded because the S3-and-external-antenna requirements that drove this table no longer apply.
+</details>
+
+**Side effect, unchanged from before**: dropping the custom USB-C ingress removes the VBUS-vs-DC-terminal source-select stage (Q1/Q3/Q4/Q5, still legacy-root-only) entirely — including Q4/Q5's gate-drive chain, which has been an unresolved electrical gap since early in the project. Domain A power ingress simplifies to just the DC terminal path, same shape as Domain B. SW1/SW2 (EN/BOOT buttons) likely become redundant too — C3 Super Mini boards typically have their own onboard RST/BOOT buttons, pending confirmation from the in-progress sourcing pass.
 
 ## Housekeeping — found in the 2026-08-01 documentation audit, not yet resolved
 

@@ -81,20 +81,17 @@ Motorola isolated MCU logic from coil drive with ADuM1410 digital isolators. The
 
 If ORC's controller and the relay board share a supply and a solid star ground, the case for isolation is weaker. This is a deliberate decision to make, **not one to skip by default**. Isolation also costs channel count, board area, and an isolated supply for the coil-side logic.
 
-### Primary control path
+### Primary control path — resolved 2026-08-01
 
-The ESP32-S3 gives WiFi essentially for free, but that is not automatically the right primary link:
+**CAN, exclusively. No wireless (WiFi/BLE) at all** — reversed from the original assumption that "WiFi is essentially free." Two things forced this, not one: a mechanical finding (only ~8.5mm clearance between two stacked PCBs, not enough room for both a USB-C connector and the required DC+CAN screw terminal) plus a scope decision (the board's actual job is CAN in, drive the I2C GPIO expander out — light duty, doesn't need a WiFi/BLE stack or the dual-core Xtensa S3 originally assumed). MCU is moving from a bare ESP32-S3-WROOM-1U to a pre-made **ESP32-C3** module (see subcircuit-capture-guide.md's MCU section for the specific board once sourcing lands) — single-core RISC-V, confirmed adequate for this workload.
 
-- **Warning/emergency lighting** → a wired primary path (**CAN** or **USB**) is defensible; association dropouts and latency are poor failure modes. WiFi carries configuration and monitoring.
-- **Accessory/camp/work lighting** → that argument largely evaporates and WiFi-primary is reasonable.
+### Antenna — moot, superseded by the above
 
-Decide which this unit is for before committing, since it changes whether a CAN transceiver is on the BOM.
+The external-antenna requirement below is **obsolete**, kept for record only. With wireless descoped entirely, radio is never enabled in firmware, so a sealed metal enclosure blocking a PCB-trace antenna is no longer a real constraint — this also reopens cheap PCB-antenna-only modules that were previously disqualified.
 
-### Antenna
+~~The chassis is metal and sealed, so an on-module PCB antenna will not radiate out. Routine to solve: use an external-antenna module (**ESP32-S3-WROOM-1U** or equivalent, U.FL/IPEX) with a pigtail to an **O-ring-sealed bulkhead SMA** at one of the existing gland positions.~~
 
-The chassis is metal and sealed, so an on-module PCB antenna will not radiate out. Routine to solve: use an external-antenna module (**ESP32-S3-WROOM-1U** or equivalent, U.FL/IPEX) with a pigtail to an **O-ring-sealed bulkhead SMA** at one of the existing gland positions.
-
-Pick the module variant and bulkhead part **before layout** — U.FL placement constrains the board outline.
+~~Pick the module variant and bulkhead part before layout — U.FL placement constrains the board outline.~~
 
 ## Outstanding measurements
 
