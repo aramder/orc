@@ -273,3 +273,13 @@ Dispatched a Gate 1 sourcing pass for TS-1187A-B-A-B (SW1 had never actually bee
 Updated subcircuit-capture-guide.md: SW1 now ✅ with real LCSC and confirmed function; SW2 added as a new 🔧 line (part sourced, not yet drawn — needs to land on `GPIO0_A` ↔ GND on the MCU sheet). Removed SW1 from the "still unresolved" housekeeping list.
 
 **Background sourcing agent for this same part was still running when the user gave the number directly** — its result will land as a separate notification; reconcile against C318884 when it does rather than treating both as independent findings.
+
+## 2026-08-01 — `git pull` collided with a parallel session
+
+Committed the SW1/SW2 doc update (`0dcdef7`), then `git pull` pulled in `2115714` ("Source USB-C CC pull-downs and confirm CAN terminal part") — a **different session/instance working on this repo in parallel**, evidenced by real edits to `hardware/mcu.kicad_sch`, `orc.kicad_pcb`, `orc.kicad_pro`, `orc.kicad_sch` alongside doc changes. Two things worth knowing:
+
+- **That session recreated `hardware/BOM.md`** from a pre-retirement snapshot — it doesn't know BOM.md was retired in favor of subcircuit-capture-guide.md (`abf8ed5`, earlier today). Its actual new content (R11/R12 CC pull-downs sourced to YAGEO RT0402BRD075K1L/C852856; J5/J6's previously-flagged "(C2827883)" number confirmed correct — DORABO DB128L-5.08-4P-GN-S, Extended, 16A/300V, 28.9k stock) had already been independently merged into subcircuit-capture-guide.md by git's auto-merge (non-conflicting hunks). **Re-deleted BOM.md again** rather than let it come back — nothing of value was lost, everything it added is in the capture guide now.
+- **One real merge conflict**, in the capture guide's 🔧 footprint-work section — my SW2 bullet and their more-detailed J5/J6-confirmed bullet were adjacent but not overlapping; kept both.
+- **Confirms one Housekeeping item from earlier today was wrong to leave as "unverified"** — root's `J2` "(C2827883)" number turned out to be genuinely correct, not a stray. Good catch by whoever ran that other session; the capture guide's Housekeeping section now reflects the confirmed state.
+
+Local is now ahead of `origin/main` by this merge commit (`30bf9b0`) — not pushed. If another session is actively working on this repo, worth pushing soon to avoid a second collision, and worth being aware there's at least one other active session before assuming exclusive ownership of `hardware/` going forward.
