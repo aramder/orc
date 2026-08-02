@@ -1768,9 +1768,9 @@
 		)
 		(uuid "c005e686-8384-4a5d-95e0-682f15eb8131")
 	)
-	(text "ESP32\n\n"
+	(text "ESP32"
 		(exclude_from_sim no)
-		(at 144.78 80.01 0)
+		(at 144.78 76.2 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -1781,6 +1781,20 @@
 			(justify left bottom)
 		)
 		(uuid "c3605294-1ee8-4582-a811-815c70378dda")
+	)
+	(text "Reset and Boot"
+		(exclude_from_sim no)
+		(at 187.96 45.72 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+				(thickness 0.508)
+				(bold yes)
+				(color 0 0 132 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "cb4afec8-14da-4202-9b7c-77a15fc44708")
 	)
 	(junction
 		(at 50.8 88.9)
@@ -2010,7 +2024,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 93.98) (xy 124.46 93.98)
+			(xy 106.68 93.98) (xy 124.46 93.98)
 		)
 		(stroke
 			(width 0)
@@ -2037,6 +2051,16 @@
 			(type default)
 		)
 		(uuid "6f03b2b4-c680-43f5-9b9f-29a9d47da92d")
+	)
+	(wire
+		(pts
+			(xy 207.01 50.8) (xy 215.9 50.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "717ef70a-8c6d-4d5b-b52b-34a98e9232b4")
 	)
 	(wire
 		(pts
@@ -2070,7 +2094,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 114.3) (xy 124.46 114.3)
+			(xy 114.3 114.3) (xy 124.46 114.3)
 		)
 		(stroke
 			(width 0)
@@ -2090,7 +2114,7 @@
 	)
 	(wire
 		(pts
-			(xy 107.95 116.84) (xy 124.46 116.84)
+			(xy 114.3 116.84) (xy 124.46 116.84)
 		)
 		(stroke
 			(width 0)
@@ -2150,7 +2174,7 @@
 	)
 	(wire
 		(pts
-			(xy 154.94 129.54) (xy 167.64 129.54)
+			(xy 154.94 129.54) (xy 175.26 129.54)
 		)
 		(stroke
 			(width 0)
@@ -2169,7 +2193,7 @@
 		(uuid "f44a2dc8-2f36-437b-a208-f285678e4ebe")
 	)
 	(label "GPIO46_A"
-		(at 167.64 129.54 0)
+		(at 165.1 129.54 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -2177,16 +2201,6 @@
 			(justify left bottom)
 		)
 		(uuid "080ee2b5-f0e9-4af1-82a5-b06da868822e")
-	)
-	(label "SCL_A"
-		(at 107.95 116.84 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "1343b7be-47cf-42db-b128-e06828160003")
 	)
 	(label "EN_A"
 		(at 107.95 88.9 0)
@@ -2218,18 +2232,8 @@
 		)
 		(uuid "5b24f98e-80d9-46a6-a2d6-46163017b0b4")
 	)
-	(label "SDA_A"
-		(at 107.95 114.3 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "692c7d72-d6d2-49cf-8c6e-972e3bfdb2ca")
-	)
 	(label "GPIO0_A"
-		(at 107.95 93.98 0)
+		(at 106.68 93.98 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -2248,6 +2252,16 @@
 		)
 		(uuid "c223e91d-e144-4681-9a7a-bec389f87861")
 	)
+	(label "GPIO0_A"
+		(at 207.01 50.8 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "c76f1ce0-40f6-4aa5-bd64-84dc928b13d6")
+	)
 	(label "EN_A"
 		(at 63.5 88.9 0)
 		(effects
@@ -2257,6 +2271,30 @@
 			(justify left bottom)
 		)
 		(uuid "d1b71b45-82cb-4ebc-ac7a-f1cc1160d501")
+	)
+	(global_label "SDA_A"
+		(shape bidirectional)
+		(at 114.3 114.3 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "1bc6a9f0-f195-49be-8812-2294c04dfd67")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 104.5792 114.3 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
 	)
 	(global_label "UART_RX_A"
 		(shape input)
@@ -2303,6 +2341,30 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+			)
+		)
+	)
+	(global_label "SCL_A"
+		(shape bidirectional)
+		(at 114.3 116.84 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "d8eddf97-b354-420f-8bfc-c4f812cc9f71")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 104.6397 116.84 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
 			)
 		)
 	)
@@ -2790,6 +2852,85 @@
 			(project "orc"
 				(path "/dfe8a5cf-95d8-40b2-99f0-435f7d912c24/e58ed683-0af2-459e-a614-11ad8be943ea"
 					(reference "#PWR012")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 215.9 60.96 0)
+		(mirror y)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "456d2d3e-be21-41d8-a196-4022042f85de")
+		(property "Reference" "#PWR033"
+			(at 215.9 67.31 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 215.9 66.04 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 215.9 60.96 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 215.9 60.96 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 215.9 60.96 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "491ade43-e94a-491d-9993-38d57dda5bb5")
+		)
+		(instances
+			(project "orc"
+				(path "/dfe8a5cf-95d8-40b2-99f0-435f7d912c24/e58ed683-0af2-459e-a614-11ad8be943ea"
+					(reference "#PWR033")
 					(unit 1)
 				)
 			)
@@ -3402,6 +3543,99 @@
 			(project "orc"
 				(path "/dfe8a5cf-95d8-40b2-99f0-435f7d912c24/e58ed683-0af2-459e-a614-11ad8be943ea"
 					(reference "#PWR018")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AramLib:TS-1187A-B-A-B")
+		(at 215.9 55.88 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "b61e4e9c-7f6b-4c1e-a204-27ded6ce0292")
+		(property "Reference" "SW2"
+			(at 219.71 55.88 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TS-1187A-B-A-B"
+			(at 214.376 55.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "AramLib:TS-1187A-B-A-B"
+			(at 220.98 55.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/2304140030_XKB-Connectivity-TS-1187A-B-A-B_C318884.pdf"
+			(at 220.98 55.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 215.9 55.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C318884"
+			(at 215.9 55.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "661dd5cc-6287-4550-94f6-6c10be7a29bf")
+		)
+		(pin "1"
+			(uuid "a5c825cf-ef3b-450c-ad5b-5ab038294d23")
+		)
+		(instances
+			(project "orc"
+				(path "/dfe8a5cf-95d8-40b2-99f0-435f7d912c24/e58ed683-0af2-459e-a614-11ad8be943ea"
+					(reference "SW2")
 					(unit 1)
 				)
 			)

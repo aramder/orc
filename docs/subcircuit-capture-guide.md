@@ -12,7 +12,7 @@ Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Is
 
 - **Catch diode value — resolved 2026-08-01: SS34 (C8678) is correct.** Root schematic's D2/D3 still show "SS56" (stale, predates the correction) — harmless since root is legacy and not sourced from, but don't let it confuse a future read of root.
 - **D1 (SMBJ26CA, load-dump TVS) is still placed in root** even though the design decision to drop it was made and documented — the symbol was never deleted. Low priority since root is legacy, but noted so it isn't mistaken for a live requirement if root gets referenced.
-- **Root's `J2` symbol carries "(C2827883)" embedded in its description field** — an LCSC-shaped number that was never carried into a BOM's LCSC column and never went through a documented Gate 1 pass. Don't treat it as sourced; if J2/J6's real DORABO DB128L-5.08-4P-GN-S terminal ever needs re-verifying, start fresh rather than assuming C2827883 is right.
+- **Root's `J2` symbol carries "(C2827883)" embedded in its description field.** As of the latest Gate 1 pass this number is confirmed correct: DORABO DB128L-5.08-4P-GN-S, 5.08mm 4-pos screw terminal, C2827883 (Extended, 16A/300V, 28.9k stock). It's now carried in J6's LCSC column in Block 4.
 - **Root has a stray `R4 22kΩ`** with no documented function anywhere in current or historical BOM content. Possibly a leftover from the dropped TVS/load-dump analysis network. Needs a function check before it's either sourced or written off as dead.
 - **PCB is significantly out of sync with the current schematic** (checked 2026-08-01): the entire Power Side B subcircuit (U10/R26/L4/R27/D6) is placed in the schematic but absent from the PCB; U7 (ESP32) and U9 (ADuM1250) are also missing from the PCB despite their support passives being placed. What *is* on the PCB uses stale ref numbers from before the last schematic re-annotation (`U3`→`U8`, `R18`/`R19`→`R24`/`R25` are the same physical parts). Needs a `pcb_sync_from_schematic` pass once the schematic itself is further along — resyncing now would just need to happen again.
 - **Still unresolved from the prior pass**: SW1 (MCU sheet, tactile switch — no documented function), J5 (Communications, 2-pin header — unclear role), R13 (Communications, 10kΩ 0.1% — unclear role), and a bare `GND` power symbol on the MCU sheet where everywhere else uses `GND_A` specifically.
@@ -94,10 +94,10 @@ Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Is
 | Ref | Value / part | Function | LCSC | Status |
 |---|---|---|---|---|
 | J4 | USB-C receptacle, Hroparts TYPE-C-31-M-12 | USB-C VBUS/data ingress | C165948 | ⚠️ Basic/Extended tier not confirmed live |
-| R11 | 5.1kΩ ±0.1%, 0402 | **USB-C CC1 Rd pull-down — closes a previously-flagged open item** (USB-C spec requires this for the port to be recognized by a host at all) | — | ⚠️ not yet sourced. 0.1% tolerance in 0402 is a tighter/pricier spec than the board's usual 1% 0603 default — worth a dedicated Gate 1 pass |
-| R12 | 5.1kΩ ±0.1%, 0402 | USB-C CC2 Rd pull-down (pair with R11) | — | ⚠️ same as R11 |
+| R11 | 5.1kΩ ±0.1%, 0402, YAGEO RT0402BRD075K1L | **USB-C CC1 Rd pull-down — closes a previously-flagged open item** (USB-C spec requires this for the port to be recognized by a host at all) | C852856 | ✅ Extended, ±25ppm/℃ thin film, 72k stock |
+| R12 | 5.1kΩ ±0.1%, 0402, YAGEO RT0402BRD075K1L | USB-C CC2 Rd pull-down (pair with R11) | C852856 | ✅ same part as R11 |
 | J5 | 01x02 header | Unclear function — doesn't match any legacy-root part at this position | — | ❌ needs a label/purpose check before sourcing |
-| J6 | 5.08mm screw terminal, 4-pos | DC + CAN field terminal | — | 🔧 old part was DORABO DB128L-5.08-4P-GN-S (right-angle, chosen after two push-in-spring candidates failed the wire-entry/actuator requirement) — confirm this footprint actually matches; don't reuse the stray "C2827883" number from root (see Housekeeping) |
+| J6 | 5.08mm screw terminal, 4-pos, DORABO DB128L-5.08-4P-GN-S | DC + CAN field terminal | C2827883 | ✅ Extended, 16A/300V, 12-22 AWG, 28.9k stock. The root's "C2827883" number is confirmed correct after a Gate 1 pass |
 | U6 | SN65HVD230 | CAN transceiver, 3.3V native | C12084 | ⚠️ Basic/Extended tier not independently confirmed live. ±16kV HBM ESD on bus pins built in — no external CAN ESD part needed |
 | U5 | USBLC6-2SC6 | USB D+/D- ESD array | C2827654 | ⚠️ SOT-23-6, Extended tier verified live. Check series-vs-parallel insertion (legacy root wired it as a parallel stub, not true series — worth doing properly on this fresh capture) |
 | C13 | 100nF | U6 VCC bypass, at the pin | — | ⚠️ generic |
@@ -192,7 +192,7 @@ PF1, PF3, PF5, PF6, PF7, PF8 — `power:PWR_FLAG`, 6×, ERC bookkeeping only. Ea
 ## Section 🔧 — needs real KiCad symbol/footprint work, not a sourcing gap
 
 - **U1/U7 — ESP32-S3-WROOM-1U footprint.** See MCU sheet above.
-- **J5/J6 — DORABO DB128L-5.08-4P-GN-S.** Right-angle 5.08mm screw terminal, mechanically specific (chosen after two push-in-spring candidates failed the wire-entry/actuator requirement). Verify KiCad's connector footprint libraries have a matching right-angle 5.08mm 4-pos footprint, or build one from DORABO's datasheet drawing.
+- **J5/J6 — DORABO DB128L-5.08-4P-GN-S, LCSC C2827883.** 5.08mm screw terminal, 4-pos, mechanically specific (chosen after two push-in-spring candidates failed the wire-entry/actuator requirement). Verified live (Extended, 16A/300V, 12-22 AWG). Verify KiCad's connector footprint libraries have a matching 5.08mm 4-pos footprint, or build one from DORABO's datasheet drawing.
 - **F1, F2 — PTC fuse footprint.** Confirm the placed footprint actually matches C207083's real SMD 2-pad package, not a generic fuse symbol's default footprint.
 - **Q2 — Domain B reverse-polarity FET footprint.** TO-252/DPAK, not the SOT-23 the placeholder used — real footprint swap, not just a value edit.
 - **All ~35 generic-value passives** (10k resistors, 0.1µF/1µF ceramic caps for decoupling/bias/pull-ups) use KiCad's standard `Device:R`/`Device:C` symbols with standard footprints — no custom KiCad work, just a Gate 1 distributor pull once ready to lock values.
