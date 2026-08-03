@@ -1,0 +1,7 @@
+(version 1)
+
+(rule "coil-signal-min-width"
+    (condition "A.NetName == 'COIL*' && A.NetName != 'COIL*_EN'")
+    (constraint track_width
+      (min 0.25mm))
+    (severity error))

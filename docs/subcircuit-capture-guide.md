@@ -29,6 +29,8 @@ Five sheets exist today: Power Side A, Power Side B, MCU, Communications, I2C Is
 
 **Still open before this is schematic-ready**: pick and buy a specific listing (confirming real bulk pricing and the flash-marking QC risk directly), empirically confirm GPIO8/9 I2C-vs-strapping behavior on real hardware once it arrives (static/datasheet analysis is now done and says safe — see above; this remaining item is the bench-verification step, not an open question about the design), confirm native-USB vs. CH340 for that specific listing. **Don't source or lock U7/J4/U5/R11/R12 further, and don't remove SW1/SW2 from the schematic, until a specific listing is actually bought and confirmed** — this research covers the "Super Mini" class generically, not one verified purchasable SKU.
 
+**New GPIO reservation, 2026-08-02 (design-only, see circuit-draft.md's "Node-ID address input" section)**: 4 of the 13 usable header GPIO are earmarked for a 4-position node-ID DIP switch, read directly by the ESP32 rather than through the PCA9555 — Domain B (and the PCA9555 on it) only has power when harness A+ is present, so a PCA9555-hosted switch would be unreadable during USB-only bench operation. Budget: 13 usable − SDA/SCL (2) − TWAI TX/RX (2, once the CAN firmware swap lands) − 4 node-ID = **5 still free**. Silkscreen labels each position by decimal weight (1/2/4/8), not bit index — sum the ON positions for the node ID. Specific pin numbers not yet picked — deferred to the same "buy a specific listing" step above, since the exact broken-out pinout isn't nailed down until then. DIP switch part itself also not yet sourced (Gate 1 pending).
+
 <details><summary>Superseded S3-module candidate research (2026-08-01, before the wireless/chip-family decision) — kept for record, not actionable</summary>
 
 | Candidate | Antenna | USB | Flash/PSRAM | Size/mount | Buttons | Confidence |
@@ -51,6 +53,7 @@ Superseded because the S3-and-external-antenna requirements that drove this tabl
 - **Root has a stray `R4 22kΩ`** with no documented function anywhere in current or historical BOM content. Possibly a leftover from the dropped TVS/load-dump analysis network. Needs a function check before it's either sourced or written off as dead.
 - **PCB is significantly out of sync with the current schematic** (checked 2026-08-01): the entire Power Side B subcircuit (U10/R26/L4/R27/D6) is placed in the schematic but absent from the PCB; U7 (ESP32) and U9 (ADuM1250) are also missing from the PCB despite their support passives being placed. What *is* on the PCB uses stale ref numbers from before the last schematic re-annotation (`U3`→`U8`, `R18`/`R19`→`R24`/`R25` are the same physical parts). Needs a `pcb_sync_from_schematic` pass once the schematic itself is further along — resyncing now would just need to happen again.
 - **Still unresolved from the prior pass**: J5 (Communications, 2-pin header — unclear role), R13 (Communications, 10kΩ 0.1% — unclear role), and a bare `GND` power symbol on the MCU sheet where everywhere else uses `GND_A` specifically. (SW1's function is resolved — see MCU sheet — and it's the same part as the still-to-be-placed SW2/BOOT button.)
+- **kicad-mcp-pro `sch_update_properties`/`sch_modify_property` write-guard false positive, found 2026-08-02**: on `power_side_a.kicad_sch`, both tools refused *every* write attempt (even a plain Value-only change) with "the schematic mutation dropped structure (wire 12→10)". Root cause: the sheet has two places where three collinear wire segments meet at a T-junction (a pass-through point plus a stub) — the tool's own serializer merges each collinear pair into one wire on round-trip (12→10, exactly two merges), then its own safety check flags that merge as data loss and aborts the write. Not caused by the edit being attempted; happens on any write to this specific file via these two tools. Worked around by editing the `.kicad_sch` text directly (Read/Edit) instead of the MCP property tools — confirmed safe via `git diff` (only the intended property lines changed) and `sch_get_symbols` (values read back correctly). If this recurs on another sheet, check `sch_get_wires` for collinear T-junctions before assuming the requested edit is the problem.
 
 ---
 
@@ -58,19 +61,26 @@ Superseded because the S3-and-external-antenna requirements that drove this tabl
 
 **Purpose**: Domain A buck regulator, VIN → 3V3_A.
 
-**Parts placed today**:
+**IC: LMR50410XDBVR, SOT-23-6, LCSC C2841056** — confirmed live via `lib_get_component_details`: Extended tier, 4,643 in stock, $0.43/unit. Synchronous (integrated low-side FET, no external catch diode), fixed 700kHz switching, PFM light-load mode. Picked over the FPWM variant (LMR50410XFDBVR, C5219371) — its stock was checked and found too low for this build. Full sourcing history and the board-space rationale for moving off the original LM2596S-ADJ/TO-263 design: circuit-draft.md, "Buck IC switched to LMR50410."
+
+**KiCad sheet not yet redrawn against this decision** — U8/L3/D5/R24/R25 as currently placed are the retired LM2596S-ADJ design and need replacing with the parts below.
+
+**Parts to place**:
 
 | Ref | Value / part | Function | LCSC | Status |
 |---|---|---|---|---|
-| U8 | LM2596S-ADJ | Buck regulator | C963385 | ✅ TO-263, adjustable, 3A, Vin 4.5–40V |
-| L3 | **68µH, SXN SMDRI127-680MT** | Buck inductor | C9907 | ✅ sourced live 2026-08-01, replacing an earlier KOHERelec pick that had only 194 units in stock. 49,310 in stock, Basic tier, 4A Isat/2.1A rated (3×+ margin over the 0.67A load), DCR 140mΩ, 12.3×12.3×8mm. **Open**: automotive/extended-temp rating not stated on the listing. **Pending edit**: sheet currently shows this part placed at 15µH (an unintended template placeholder, confirmed) — value and footprint both need updating in KiCad. |
-| D5 | SS34, MDD (Microdiode Semiconductor) | Catch diode | C8678 | ✅ 40V/3A Schottky, SMA(DO-214AC), Basic, 2.37M in stock. Meets the ≥36V requirement (1.25×28.8V) with the exact TI Fig 9-13 bracket part. |
-| R24 | 1.2kΩ ±1% 0603, UNI-ROYAL | FB divider, bottom | C22765 | ✅ Basic |
-| R25 | 2.0kΩ ±1% 0603, UNI-ROYAL | FB divider, top | C22975 | ✅ Basic |
+| U8 | LMR50410XDBVR | Buck regulator | C2841056 | ✅ SOT-23-6, 4–36V, 1A, synchronous, confirmed live (Extended, 4,643 stock, $0.43) |
+| L3 | **33µH, Chilisin LVS606045-330M-N** | Buck inductor | C285825 | ✅ confirmed live: SMD 6×6mm, 1.4A rated / 2.3A saturation, 165mΩ DCR, Extended, 1,052 stock, $0.069. **Same part reused for L4** (Power Side B) — user's explicit call for BOM line count. Sized against the coil rail's revised 0.7A max expected load (see L4's note); comfortably oversized for this 3.3V rail's own ~0.2-0.5A load. Stepped up from an earlier 4×4mm/840mA-rated pick (SNR4030-330MT, C5127398) once the coil-rail load estimate was revised — that part's margin got too thin at the new number, see L4's note and circuit-draft.md. |
+| D5 | — | Catch diode | — | **Removed** — LMR50410 is fully synchronous, no external catch diode needed |
+| R24 | 2.7kΩ ±1% 0603, UNI-ROYAL 0603WAF2701T5E | FB divider, bottom (RFBB) | C13167 | ✅ confirmed live: **Basic tier**, 1,404,867 stock, $0.0010. Re-sourced 2026-08-02 (was 43.2kΩ/C23053, Extended) to close every FB resistor at Basic tier — different RFBT/RFBB pair than the original computation, same ~3.3V target. |
+| R25 | 6.2kΩ ±1% 0603, UNI-ROYAL 0603WAF6201T5E | FB divider, top (RFBT) | C4260 | ✅ confirmed live: **Basic tier**, 352,385 stock, $0.0010. Re-sourced 2026-08-02 (was 100kΩ/C22936) — no longer shared with R26, each instance now has its own RFBT/RFBB pair chosen from the Basic-tier value set. Vout = 1.00×(1+6.2k/2.7k) = **3.30V** (−0.11%). |
+| — | 2.2µF X7R ceramic, ≥50V | CIN bulk | *not yet sourced* | ⚠️ open — value/type from LMR50410 datasheet (§9.2, direct PDF read) |
+| — | 0.1µF X7R ceramic | CIN high-freq bypass | *not yet sourced* | ⚠️ open |
+| — | Small tantalum or polymer, value TBD | CIN damping cap | *not yet sourced* | ⚠️ open — datasheet flags a long-input-lead resonance risk; this board's automotive harness feed is exactly that case, so a small damping cap stays even though CIN is otherwise all-ceramic. Sized for damping, not bulk storage — far smaller than the electrolytic can this design used to carry. |
+| — | 22µF X7R ceramic | COUT | *not yet sourced* | ⚠️ open — single cap per datasheet Table 9-1, no bulk cap needed |
+| — | 0.1µF X7R ceramic, ≥16V | CBOOT | *not yet sourced* | ⚠️ open |
 
-**Not yet migrated from legacy root**: CIN bulk caps (47µF/63V ×2, C3274436), CIN ceramic bypass (1µF/100V X7R, C13832), COUT bulk cap (220µF/35V, C5243827) and its ceramic bypass (1µF/50V X7R, C28323). Without these the sheet has the feedback/switching side wired but no bulk input/output capacitance — expected mid-capture, flagging so it isn't mistaken for finished.
-
-**Wiring**: `VIN_BUCK_A` → U8 Vin, switch node = `SW_A` → L3 → `3V3_A` output; D5 catch diode on `SW_A`↔`GND_A`; FB divider `3V3_A` → R25 → `FB_A` → U8 FB, R24 → `GND_A`. Vout = 1.23×(1+2000/1200) = **3.28V**.
+**Wiring**: `VIN_BUCK_A` → U8 Vin; CIN (2.2µF + 0.1µF ceramic + damping cap) across Vin↔GND_A at the IC pins; switch node `SW_A` → L3 → `3V3_A` output; COUT (22µF ceramic) across `3V3_A`↔GND_A; CBOOT between U8's BOOT pin and `SW_A`; FB divider `3V3_A` → R25 (6.2kΩ) → `FB_A` → U8 FB, R24 (2.7kΩ) → `GND_A`. Vout = 1.00×(1+6.2k/2.7k) = **3.30V**.
 
 ---
 
@@ -78,45 +88,72 @@ Superseded because the S3-and-external-antenna requirements that drove this tabl
 
 **Purpose**: Domain B (coil-drive) buck regulator, V_COIL_IN → COIL_9V.
 
-**Parts placed today**:
+**Same IC as Power Side A**: LMR50410XDBVR, C2841056. Same sourcing/rationale — see Power Side A above and circuit-draft.md's "Buck IC switched to LMR50410."
+
+**KiCad sheet not yet redrawn against this decision** — U10/L4/D6/R26/R27 as currently placed are the retired LM2596S-ADJ design and need replacing with the parts below.
+
+**Parts to place**:
 
 | Ref | Value / part | Function | LCSC | Status |
 |---|---|---|---|---|
-| U10 | LM2596S-ADJ | Buck regulator | C963385 | ✅ same line as U8 |
-| L4 | **68µH, SXN SMDRI127-680MT** | Buck inductor | C9907 | ✅ same part as L3 — see L3's line for full sourcing detail. Same pending edit: currently placed at 15µH, needs correcting. |
-| D6 | SS34, MDD | Catch diode | C8678 | ✅ same part as D5; also the flyback-diode candidate if ORC ever needs to supply one for the relay board (see harness section below) |
-| R26 | 7.5kΩ ±1% 0603, UNI-ROYAL | FB divider, top | C23234 | ✅ Basic |
-| R27 | 1.2kΩ ±1% 0603, UNI-ROYAL | FB divider, bottom | C22765 | ✅ same part as R24 |
+| U10 | LMR50410XDBVR | Buck regulator | C2841056 | ✅ same part as U8 |
+| L4 | **33µH, Chilisin LVS606045-330M-N** | Buck inductor | C285825 | ✅ same part as L3 — consolidated 2026-08-02 for BOM line count, **re-sourced same day after the coil-rail max expected load was revised from 0.45A to 0.7A**. At 28.8V/9V/700kHz, 33µH gives ripple current ΔIL≈268mA (unchanged by the load revision — ΔIL depends on Vin/Vout/fsw/L, not Iout), KIND≈0.383 at the new 0.7A load (was 0.595 at 0.45A — actually more comfortable now, well inside the 0.2-0.6 range). The load revision instead changed the *current-rating* margin: the original 4×4mm pick (SNR4030-330MT, 840mA rated/1.1A sat, C5127398) only cleared 0.7A by ~1.2× rated/~1.3× saturation — too thin for a sealed 65-85°C enclosure per this project's own PTC-derating lesson. New part clears with real margin: 1.4A rated / 0.7A = **2.0× rated-current margin**; 2.3A saturation / 0.834A peak (0.7A + ΔIL/2) = **~2.76× saturation margin**. See circuit-draft.md for the full math. |
+| D6 | — | Catch diode | — | **Removed** — same reasoning as D5. Note: D6 was also the flyback-diode candidate for the relay board itself — that's a separate, still-open question (bench inspection needed), unaffected by this IC's own catch-diode removal |
+| R26 | 24kΩ ±1% 0603, UNI-ROYAL 0603WAF2402T5E | FB divider, top (RFBT) | C23352 | ✅ confirmed live: **Basic tier**, 450,302 stock, $0.00099. Re-sourced 2026-08-02 (was 100kΩ/C22936, shared with R25) — LMR50410's recommended RFBT range is 10-100kΩ, 24kΩ is inside it. |
+| R27 | 3kΩ ±1% 0603, UNI-ROYAL 0603WAF3001T5E | FB divider, bottom (RFBB) | C4211 | ✅ confirmed live: **Basic tier**, 3,745,756 stock, $0.00099. Re-sourced 2026-08-02 (was 12.4kΩ/C22865, Extended). Vout = 1.00×(1+24k/3k) = **9.00V exact**. |
+| — | 2.2µF X7R ceramic, ≥50V | CIN bulk | *not yet sourced* | ⚠️ open, same as Power Side A |
+| — | 0.1µF X7R ceramic | CIN high-freq bypass | *not yet sourced* | ⚠️ open |
+| — | Small tantalum or polymer, value TBD | CIN damping cap | *not yet sourced* | ⚠️ open, same long-input-lead reasoning as Power Side A |
+| — | 22µF X7R ceramic | COUT | *not yet sourced* | ⚠️ open |
+| — | 0.1µF X7R ceramic, ≥16V | CBOOT | *not yet sourced* | ⚠️ open |
 
-**Not yet migrated**: same gap as Power Side A — CIN/COUT bulk caps + bypass, plus the feedforward cap (1000pF/1nF C0G 0805, Fenghua 0805CG102J500NT, C29925 — TI Table 9-6 lists this at the 9V row despite the >10V prose rule).
+**No feedforward cap** — unlike the old LM2596 design (which needed one on this 9V rail per TI's Table 9-6), LMR50410's datasheet doesn't mention Cff anywhere; internal compensation handles it unconditionally regardless of RFBT or Vout.
 
-**Wiring**: `V_COIL_IN` → U10 Vin, switch node `SW_B` → L4 → `COIL_9V`; D6 on `SW_B`↔`GND_B`; FB divider `COIL_9V` → R26 → `FB_B` → U10 FB, R27 → `GND_B`. Vout = 1.23×(1+7500/1200) = **8.92V**.
+**Wiring**: `V_COIL_IN` → U10 Vin; CIN network as above; switch node `SW_B` → L4 → `COIL_9V`; COUT (22µF ceramic) across `COIL_9V`↔GND_B; CBOOT between U10's BOOT pin and `SW_B`; FB divider `COIL_9V` → R26 (24kΩ) → `FB_B` → U10 FB, R27 (3kΩ) → `GND_B`. Vout = 1.00×(1+24k/3k) = **9.00V**.
+
+**Wiring (stale — LM2596-era)**: `V_COIL_IN` → U10 Vin, switch node `SW_B` → L4 → `COIL_9V`; D6 on `SW_B`↔`GND_B`; FB divider `COIL_9V` → R26 → `FB_B` → U10 FB, R27 → `GND_B`. Vout = 1.23×(1+7500/1200) = **8.92V** (LM2596-era math).
 
 ---
 
 ## MCU — `mcu.kicad_sch`
 
-**Purpose**: ESP32-S3 core, plus reset/boot buttons.
+**Purpose**: ESP32-C3 "Super Mini" class module, plus its entrance decoupling. **Fully rebuilt 2026-08-02** to implement the 2026-08-01 architecture pivot (see OPEN ARCHITECTURE DECISION above) — the bare ESP32-S3-WROOM-1 + custom USB-C/ESD/CC-pulldown circuit (old U7, R15–R17, SW1/SW2, C15) is gone from this sheet entirely, replaced by a single pre-made module symbol. **Symbol widened and pin table corrected again later the same day** once real reference data arrived — see the two dated passes below.
+
+**⚠️ Everything on this sheet is a placeholder pending a bought listing.** No specific "ESP32-C3 Super Mini" SKU has been purchased yet (see OPEN ARCHITECTURE DECISION's "Still open" line). The symbol and footprint are now built from real reference data (a pinout guide + a dimensioned product photo, both user-supplied), which is considerably better than yesterday's from-doc-prose reconstruction, but neither is tied to one specific bought listing — treat every number here as "real but generic," not "confirmed for this exact SKU," until one is bought and checked.
 
 **Parts placed today**:
 
 | Ref | Value / part | Function | LCSC | Status |
 |---|---|---|---|---|
-| U7 | ESP32-S3-WROOM-1**U**-N8 | MCU, external antenna | — | 🔧 schematic symbol's assigned footprint is the generic non-U (onboard PCB antenna) variant — needs the real -1U footprint (external antenna; the U.FL launch area needs its own keepout, checked against the module datasheet's Fig. 10) before layout. Also re-confirm -N8 = 8MB flash/no PSRAM against Espressif's literal ordering table (not yet re-confirmed). |
-| C14 | 10µF/25V, Samsung | 3.3V entrance decoupling | C96446 | ✅ JLC Basic |
-| C15 | 10µF/25V, Samsung | EN RC cap (or entrance dup — verify which) | C96446 | ✅ same part as C14 |
-| C16 | 0.1µF/50V, Samsung | 3V3-pin decoupling | C14663 | ✅ JLC Basic |
-| R15 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull (verify which — 3 identical parts placed, function not distinguished in the pulled data) | C25804 | ⚠️ part confirmed, exact net assignment not individually re-verified |
-| R16 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull | C25804 | ⚠️ same caveat |
-| R17 | 10kΩ ±1% 0603, UNI-ROYAL | strap/EN pull | C25804 | ⚠️ same caveat |
-| SW1 | XKB Connection TS-1187A-B-A-B (tactile switch) | **Confirmed 2026-08-01**: EN/reset button — momentary, pulls EN low through this switch to GND | C318884 | ✅ sourced live 2026-08-01: SMD-4P 5.1×5.1mm, 12V/50mA rating (plenty for logic-level use), **-30 to +85°C** (comfortably covers this enclosure's 65-85°C ambient — no thin-margin concern like the PCA9555's), 100k-cycle life, 1,068,940 in stock. Tier badge didn't render to fetch; stock depth strongly suggests Basic, not independently confirmed. |
-| SW2 | Same part, C318884 | **New, not yet placed** — GPIO0/BOOT button, same electrical role as SW1 (momentary to GND). EN alone can't select boot mode; without this there's no way to force download/bootloader mode without desoldering the sealed enclosure if the native-USB auto-reset path ever fails. GPIO0_A's pull-up already exists (one of R15/R16/R17) — SW2 just needs to land on that same net → GND. | C318884 | 🔧 needs to be added to the schematic — part already sourced (same as SW1), just not drawn yet |
+| U7 | **ESP32-C3-SuperMini** (custom symbol/footprint, `AramLib:ESP32-C3-SuperMini`) | MCU module | — (not on LCSC, see OPEN ARCHITECTURE DECISION — AliExpress/eBay hand-assembly line) | 🔧 placeholder part — see caveats below |
+| C14 | 10µF/25V, Samsung | 3V3_A bulk decoupling, module entrance | C96446 | ✅ same part reused from the old S3 circuit — repurposed, not resourced |
+| C16 | 0.1µF/50V, Samsung | 3V3_A local bypass, module entrance | C14663 | ✅ same part reused from the old S3 circuit — repurposed, not resourced |
 
-**Nets present**: `EN_A`, `GPIO0_A`, `GPIO46_A`, `SCL_A`, `SDA_A`, `UART_RX_A`, `UART_TX_A`, `USB_N`, `USB_P` (renamed from `USB_DM`/`USB_DP` — same signals). Plus a bare `GND` power symbol near SW1 — inconsistent with every other Domain A ground reference (`GND_A`), see Housekeeping above.
+**Removed from this sheet** (all obsolete under the new architecture, per OPEN ARCHITECTURE DECISION's explicit call): C15 (was an EN-RC cap / entrance-dup, ambiguous even before the pivot — dropped, not carried forward), R15/R16/R17 (bare-chip strap/EN pull-ups — the module handles its own strapping internally), SW1/SW2 (EN/BOOT buttons — module has onboard RST/BOOT buttons per the sourcing pass), and the bare ESP32-S3-WROOM-1 symbol/footprint/USB-C-adjacent nets. The USB_N/USB_P global labels are also gone — the module's USB-C connects to its own onboard chip's native USB internally, never reaching this board's headers. **No separate EN pin is exposed either** (see below) — the RST button ties EN to GND onboard, so a header-level EN connection was never actually needed.
+
+**Symbol/footprint — built from scratch, no stock KiCad asset exists for this class of board.** Checked `RF_Module:ESP32-C3-DevKitM-1`, `RF_Module:ESP32-C3-WROOM-02(U)`, and `RF_Module:WEMOS_C3_mini` — the last is the closest real candidate but is a **different, larger, differently-labeled board** (official Wemos/LOLIN product, ~34×25mm, 2×8 pins with Arduino-style `D0`–`D10` aliases) — using it would have silently drawn the wrong physical footprint, defeating the whole point of this pivot (the 8.5mm clearance finding). Built a custom part instead, in two passes:
+
+**Pass 1 (morning, 2026-08-02)** — from-doc-prose reconstruction: 16 pins, 4 left (5V/3V3/GND/EN) + 12 right (IO0–7 + 4 named), lopsided and cramped. Footprint used estimated 22.5×18mm body / 20.32mm row pitch (both guesses, and width/height were effectively transposed).
+
+**Pass 2 (afternoon, 2026-08-02)** — corrected against real references the user supplied:
+- [lastminuteengineers.com's ESP32-C3 Super Mini pinout reference](https://lastminuteengineers.com/esp32-c3-super-mini-pinout-reference/) confirmed: 2 rows of 8 pins (16 total) at 2.54mm pitch; the real GPIO set is **GPIO0–10 + GPIO20 + GPIO21 = 13 GPIO** (not the 12 Pass 1 had — Pass 1 dropped GPIO10 to force-fit a 3V3 pin into budget); **3V3 is genuinely bidirectional** ("if you have a highly stable 3.3V external battery or power supply, you can use the 3V3 pin as an input") — directly validates this sheet's `+3V3_A`-backfeeds-the-module wiring, upgrading it from an assumption to a documented board feature; and a **third strapping pin, GPIO2**, not previously analyzed (`firmware/README.md` only covered GPIO8/9) — GPIO2 is currently unused/spare in this design, flag for later if it's ever pressed into service.
+- A real **dimensioned product photo** (18.00mm wide × 22.52mm tall, 15.24mm header row pitch) corrected the footprint's actual geometry — Pass 1's estimate had width/height essentially swapped and the pitch wrong by ~5mm. This was the single highest-priority number to get right, since the whole pivot exists because of an 8.5mm clearance problem.
+- **Reconciled the pin budget cleanly this time, no invented tradeoffs**: 13 GPIO + 5V + 3V3 + GND = 16 exactly, **with no separate EN pin** — the module's onboard RST button already ties EN to GND, so EN doesn't need its own header connection at all. (Pass 1 had invented dropping a GPIO to make room for both 3V3 *and* EN; dropping the unnecessary EN pin instead means all 13 real GPIO fit with zero compromises.)
+- **Symbol widened and rebalanced** per explicit request: body half-width doubled (5.08mm→10.16mm), pin length doubled (2.54mm→5.08mm), and the lopsided 4-left/12-right split rebalanced to a clean 8-left/8-right (matching the real board's own 2×8 physical count, though — important — **this schematic-diagram left/right split is a readability choice only and does not claim to reproduce the real board's physical silkscreen layout**; only the footprint's pad *positions* carry physical-accuracy weight, and that's a separate, still-open item below).
+- **Footprint pad numbering reworked to match the symbol 1:1** (pad N = symbol pin N = the same net, guaranteed by construction) — pads 1–8 left column top-to-bottom, 9–16 right column top-to-bottom, at the confirmed real 18.00×22.52mm body / 15.24mm row pitch / 2.54mm pin pitch.
+- **Still explicitly open**: the footprint's pad *arrangement* (which physical corner has which real pin) is not confirmed against the actual board. The photo shows `5V`/`G`/`3.3` at the top of the board's **right** column with `GPIO21`/`GPIO0` at the bottom-left/bottom-right corners — this footprint's pad 1 (`5V`) currently sits on the **left**, a real unresolved mismatch. Several pins (especially the left column's upper half) aren't legible in the one photo available. **Deliberately not guessed at further** — user has taken the mechanical/physical side of this work; what's fixed today is internal consistency and real dimensions, not real-silkscreen fidelity.
+- **New library infrastructure** (unchanged from Pass 1, still in place): `hardware/fp-lib-table` (→ `hardware/AramLib.pretty/`) and `hardware/sym-lib-table` (→ `hardware/AramLib.kicad_sym`) — both resolvable, `lib_search_symbols`/`lib_search_footprints` find `AramLib:ESP32-C3-SuperMini` correctly. Pre-existing `AramLib:SS14`/`AramLib:TS-1187A-B-A-B` footprints still not backfilled into these tables — out of scope, infrastructure exists for later if wanted.
+
+**Wiring**: `+3V3_A` → module 3V3 pin (bypasses the module's own onboard 5V→3.3V regulator entirely — **module 5V pin left unconnected**, since Power Side A's buck (U8) already regulates 3V3_A independently; **now a documented board feature per the pinout reference, not just an assumption**). `GND_A` → module GND pin. Both power taps and the C14/C16 decoupling pair each get their **own separate power-symbol instances** directly at their own pins (not chained through a shared rail) — avoids a wire-merge/junction pitfall hit twice already today (see logbook). `SDA_A`/`SCL_A`/`UART_RX_A`/`UART_TX_A` global labels → module `IO8_SDA`/`IO9_SCL`/`IO20_RX`/`IO21_TX` pins respectively (same net names as before, so I2C Isolator and Communications sheets need no changes). Module `IO0`–`IO7` and `IO10` (9 spare GPIO) left unconnected with explicit no-connect flags — genuinely spare, no function assigned yet.
+
+**Nets present**: `+3V3_A`, `GND_A`, `SCL_A`, `SDA_A`, `UART_RX_A`, `UART_TX_A`.
+
+**ERC status, 2026-08-02 (Pass 2)**: clean except for the same expected single-sheet-isolation artifacts as Pass 1 (`GND_A`/`IO20_RX` "not driven," 4 global labels "connected to only one pin," 2 cosmetic `AramLib`-library warnings from `kicad-cli` not yet picking up the lib tables). No real connectivity errors this pass — Pass 1 briefly hit a "pin not connected" false-negative from two collinear wires merging around a mid-path power symbol (fixed then with an explicit junction); Pass 2 avoided the whole class of bug by giving every power tap its own dedicated symbol instance instead of chaining wires.
 
 **Open items**:
-- R15/R16/R17's exact roles (EN pull-up / GPIO0 pull-up / GPIO46 pull-down) not individually confirmed from position alone.
-- 28-GPIO no-connect marking carried from legacy root (pins 4,5,6,7,8,9,10,11,15,18,19,20,21,22,23,24,25,26,28,29,30,31,32,33,34,35,38,39, all reversible) hasn't been re-verified as present on this sheet's U7 instance.
+- Pick and buy a specific "ESP32-C3 Super Mini" listing, then reconcile the footprint's pad *arrangement* (not its dimensions, already real) against the real silkscreen — this is now the single biggest remaining gap on this sheet.
+- Confirm native-USB vs. CH340 for whatever specific listing gets bought.
+- `firmware/`'s pin assignment (GPIO8/9 I2C, GPIO20/21 UART) is unaffected by any of today's sheet rebuilds — those GPIO numbers are unchanged, just now expressed through the new module symbol's pins. GPIO2's newly-flagged strapping caution should get the same class of check GPIO8/9 already got, whenever GPIO2 is first used for something.
 
 ---
 
@@ -185,16 +222,18 @@ Whoever captures these next should give them their own sheet(s), following the s
 
 ### Domain B logic supply
 
+**Resolved 2026-08-02, user confirmed — was flagged as a contradiction earlier the same day.** This table's `COIL_9V → 3.3V` wiring is correct: U6 powers the PCA9555 I2C GPIO expander and the ADuM1250 isolator's Domain-B-side. circuit-draft.md's topology diagram previously said this rail sourced from harness A+ directly — that diagram caption was the stale one and has been corrected to match this table. Not blocking regardless (the coil-supply-gating feature that would have made the earlier ambiguity dangerous was proposed and reverted the same day, so nothing currently depends on `COIL_9V` surviving an outage). **U6 now sourced too** (C6186, confirmed Basic tier — see table below) — this section is fully closed.
+
 | Ref (legacy) | Value / part | Function | LCSC | Status |
 |---|---|---|---|---|
-| U6 | AMS1117-3.3 | Domain B logic LDO, COIL_9V → 3.3V | — | ❌ never individually sourced — needs its own Gate 1 pass (package: SOT-223) |
+| U6 | AMS1117-3.3 | Domain B logic LDO, COIL_9V → 3.3V | C6186 | ✅ confirmed live via `lib_get_component_details` (jlcsearch), 2026-08-02: SOT-223, **Basic tier**, 1,490,681 in stock, ~$0.151/unit |
 | C14/C15 (legacy refs) | 10µF ×2 | LDO in/out | — | ⚠️ generic |
 
 ### PCA9555 I2C GPIO expander
 
 | Ref (legacy) | Value / part | Function | LCSC | Status |
 |---|---|---|---|---|
-| U5 (legacy ref) | PCA9555PW,118 (NXP) | I2C GPIO expander, addr 0x20, 10-of-16 I/O used | C128392 | ⚠️ re-pulled live 2026-08-01, 8,773 in stock, TSSOP-24. Basic/Extended tier not confirmed (badge didn't render to automated fetch). **Temp margin thin**: datasheet rated −40 to +85°C against this enclosure's 65–85°C ambient — near-zero headroom for self-heating above bulk ambient, same class of concern as the PTC 85°C-derating finding. Address 0x20 is set by A0–A2 board strapping, not part-number-specific. |
+| U5 (legacy ref) | PCA9555PW,118 (NXP) | I2C GPIO expander, addr 0x20, 10-of-16 I/O used, 6 spare | C128392 | ⚠️ re-pulled live 2026-08-01, 8,773 in stock, TSSOP-24. Basic/Extended tier not confirmed (badge didn't render to automated fetch). **Temp margin thin**: datasheet rated −40 to +85°C against this enclosure's 65–85°C ambient — near-zero headroom for self-heating above bulk ambient, same class of concern as the PTC 85°C-derating finding. Address 0x20 is set by A0–A2 board strapping, not part-number-specific. |
 | C16 (legacy ref) | 0.1µF | Decoupling | — | ⚠️ generic |
 
 ### Per-channel coil driver ×10 (channels 1–10)
@@ -209,7 +248,7 @@ Identical stage repeated for each relay channel: `RBn` (PCA9555 output → NPN b
 | ~~RB1–RB10~~ | ~~10kΩ ×10 discrete~~ | ~~PCA9555 output → NPN base~~ | — | Superseded by the array above |
 | QN1–QN10 | **MMBT3904** (JSCJ) | Level-shift NPN | C20526 | ✅ **decided 2026-08-01** — Basic-tier preference over the literal MMBT2222A (which didn't appear on JLCPCB's Basic-parts lists). 253,450 in stock. Functionally interchangeable for this role (3.3V I2C-expander output → 10k base, no high-current/high-freq need). |
 | ~~RP1–RP10~~ | ~~10kΩ ×10 discrete~~ | ~~Gate pull-up to V_COIL_IN~~ | — | Superseded by the array above |
-| QP1–QP10 | AO3401A ×10 | High-side coil switch | C15127 | ✅ re-verified live 2026-08-01: 186,375 in stock, $0.10/pc single-unit. **Tier caveat applies to every C15127 line in this doc** (this bank plus the Domain A reverse-polarity/source-select FETs once migrated): LCSC's page shows no Basic/Extended badge, JLCPCB's own page didn't render one either — circumstantially Basic per third-party list cross-check, not a direct-page confirmation. |
+| QP1–QP10 | AO3401A ×10 | High-side coil switch | C15127 | ✅ re-verified live 2026-08-01: 186,375 in stock, $0.10/pc single-unit. **Tier caveat applies to every C15127 line in this doc** (this bank plus the Domain A reverse-polarity/source-select FETs once migrated): LCSC's page shows no Basic/Extended badge, JLCPCB's own page didn't render one either — circumstantially Basic per third-party list cross-check, not a direct-page confirmation. **Footprint/LCSC applied in KiCad, 2026-08-02**: `relay_drive.kicad_sch`'s 3 currently-placed AO3401A instances (Q8, Q12, Q16 — refs from the hierarchical split's own numbering, not QP1-10; only 3 of the eventual 10 channels are drawn so far per the parallel session's in-progress build-out) had empty `Footprint` and no `LCSC` field at all. Set `Footprint` to `Package_TO_SOT_SMD:SOT-23` (matches the stock KiCad symbol's own default/`ki_fp_filters`, already used by this project's other SOT-23 parts) and added `LCSC` = `C15127` to all three. Remaining channels need the same two fields applied as they're drawn — not yet a project-wide default, just fixed on what exists today. |
 | ~~D-flyback ×10~~ | ~~BAT54C (JSCJ), SOT-23-3L~~ | ~~Per-channel coil flyback~~ | ~~C2135~~ | **Reversed 2026-08-01** — see below |
 | D-flyback ×10 (refs TBD) | **SS34** (MDD), SMA(DO-214AC) — reused, same part as D3/D5/D6 | Per-channel coil flyback | C8678 | ✅ **decided 2026-08-01, final call** — BAT54C dropped: neither candidate listing (onsemi C236933, JSCJ C2135) appears in either of two independently-maintained JLCPCB Basic-parts lists, and even the "obviously safe" fallback (SS14, C2480) turned up explicitly tagged "Extended Library" in one of them — none of today's diode tier checks landed clean. Reusing C8678 (already in the BOM for D3/D5/D6) carries **zero incremental reel-fee risk** regardless of its own exact tier, since that decision is already made and already paid for — unlike introducing any new diode part number. Trade-off accepted: gives up the SOT-23 footprint win, back to SMA(DO-214AC) at ×10 instances. |
 

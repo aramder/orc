@@ -21,11 +21,106 @@ Working document for parts selection and topology, ahead of schematic capture in
 | Input voltage ceiling | **Unified to 28.8V (continuous) for both buck instances** — was 36V (1a) / 32V (1c) | 28.8V is a real number, not an arbitrary derate: it's both a 24V lead-acid float voltage and an 8S LiFePO4 full-charge voltage, covering both 24V chemistries this design supports. Eases the catch-diode requirement back to TI's literal 40V bracket; transient spikes above this are the front-end TVS's job, not the buck's. |
 | Diode part count | **Down to 2 distinct types**: SS34 (buck catch diode ×2, and coil flyback if ORC needs to supply it), USBLC6-2SC6 (USB ESD) | Consolidated this pass: CAN ESD dropped (SN65HVD230 has built-in ±16kV bus ESD), input load-dump TVS removed (transient protection now an open item, see below), and both catch diodes plus the flyback candidate moved from SS56 to a single board-wide SS34 (C8678). |
 | Harness connector pinout | **Measured: 14 positions**, not the guessed 12-13 (design-inputs.md) — see below | Confirms high-side switching and A+-on-harness independently; pitch resolved (0.1" unshrouded vertical THT). |
-| CAN interface | **Locked as the sole primary control path** — no longer provisional | Needs a transceiver, termination, and a field-wireable connector — all already sourced (SN65HVD230/C12084, R14 120Ω/C17909, J6 terminal/C2827883). |
+| CAN interface | **Locked as the sole primary control path** — no longer provisional | Needs a transceiver, termination, and a field-wireable connector — all already sourced (SN65HVD230/C12084, R14 120Ω/C17909, J6 terminal/C2827883). Protocol-format and transport-architecture research: [docs/can-protocol-research.md](can-protocol-research.md) (2026-08-01) — recommends CANopen (CiA 301/401-style) for the application layer, and finds the ESP32-C3's native TWAI controller can be routed onto the already-wired GPIO21/GPIO20 pins via the GPIO Matrix (Espressif TRM), so the current `firmware/src/uart_can_bringup` sketch's plain-UART transport should be swapped for TWAI in the next firmware pass — a firmware-only change, no schematic/pinout impact. |
 | Primary control path — **resolved 2026-08-01, CAN-only, no wireless** | Mechanical finding (only ~8.5mm clearance between stacked PCBs, not enough for both USB-C and the DC+CAN screw terminal) plus a scope decision (this board's actual job — CAN in, drive the I2C GPIO expander out — doesn't need WiFi/BLE or dual-core compute). **Both wireless config/monitoring and the dual-core Xtensa S3 are dropped, not just USB.** MCU moves from bare ESP32-S3-WROOM-1U + custom USB-C circuit to a pre-made **ESP32-C3** module (USB-C for programming only). Exact board TBD — see subcircuit-capture-guide.md's MCU section. | Retires U7/J4/U5/R11/R12 as designed-on-ORC's-board parts (replaced by one module part number), eliminates the Q1/Q3/Q4/Q5 source-select stage entirely (Q4/Q5's gate-drive chain was an unresolved electrical gap since early in the project), and retires design-inputs.md's external-antenna requirement — radio is never enabled in firmware now, so the sealed-enclosure PCB-antenna problem is moot. |
 | Domain A power entry | **Dedicated hardwired DC terminal added, alongside USB-C** — decoupled from the harness's A+ tap | Fixes a latent isolation gap: Domain A's power was implicitly going to share the harness A+ with Domain B, which would have re-connected the two "isolated" grounds through a common supply return, defeating the ADuM1250 barrier. Now Domain A's only power inputs are USB-C or this terminal — both genuinely separate from Domain B/vehicle-chassis-referenced power. ~0.2A max draw (ESP32 + CAN transceiver only, no coil current on this rail). |
 | CAN termination + ESD protection | **120Ω 0805 resistor (C17437) via a 2-pin header/shunt jumper**, plus USB (C7519) and CAN (C15771) ESD arrays | Termination now field-toggleable rather than hardwired, since whether ORC is end-of-bus depends on install. Closes two previously-unaddressed protection gaps (USB connector, CAN field terminal) — both are real transient-exposure points a technician handles directly. |
 | USB + DC-terminal source arbitration | **Active P-FET disconnect (source-select), not passive diode-OR** — DC terminal path is switched off by a FET when USB VBUS is present | Closes a gap where both sources tied to one buck Vin node could backfeed into each other (DC terminal backfeeding a USB host is the bad case). Diode-OR was evaluated and **rejected on hard numbers**: USB-IF worst-case device-end VBUS (4.4V) is already below the buck's 4.5V minimum input with *zero* diode drop added — a passive diode-OR has negative margin at spec corners, not just a thin one. |
+| Node-ID address input (multi-unit fleet addressing) | **Corrected 2026-08-02 — 4-position DIP switch, read directly by 4 ESP32-C3 GPIOs on Domain A, NOT the PCA9555.** Labeling corrected same day: weight-labeled (1/2/4/8), not bit-numbered. Design decision only, not yet sourced or drawn | Answers the open item flagged in [can-protocol-research.md](can-protocol-research.md)'s COB-ID section ("ORC's board currently has no DIP switch or equivalent"). **Critical reason for the Domain A correction**: the PCA9555 (Domain B) is powered only from harness A+ — if ORC is bench-connected over USB alone (no vehicle harness), Domain B has no power at all, and the ESP32 could never read a PCA9555-hosted switch to learn its own node ID. Direct-to-MCU wiring works in every power state Domain A itself can be in. See "Node-ID address input" section below for the full correction, labeling convention, and pin-budget accounting. |
+| ~~Coil-supply (9V) power gating~~ | ~~PCA9555-controlled enable, default OFF~~ — **reverted 2026-08-02, same session**, coil supply runs continuously instead | User call: quiescent draw isn't significant against this design's actual power budget, not worth the complexity. Also retires the Domain-B power-source contradiction this idea surfaced as a blocking dependency — no longer relevant to this feature, though the underlying doc disagreement (below) is still worth fixing on its own merits. See "Coil-supply power gating — reverted" below. |
+| Buck CIN/COUT part count | ~~Consolidated to one SMD Al-electrolytic part number~~ — **SUPERSEDED 2026-08-02, same session, by the LMR33630 IC switch below** | See "Buck IC switched to LMR33630" — the whole electrolytic-cap question is moot once the regulator IC changed; COUT goes all-ceramic. Kept for record only. |
+| **Buck IC (both instances)** | **LM2596S-ADJ (TO-263) → LMR33630 (HSOIC-8, C841384)** — real board-space problem, not a cost/thermal one this time | User reported the TO-263 + 12×12mm inductor + SMA diode solution doesn't physically fit. Re-sourced for small-package synchronous bucks rated ≥28.8V, found LMR33630 already had a live LCSC listing from an earlier (rejected-on-stale-thermal-grounds) pass. Datasheet-confirmed (direct PDF read, not a mirror): all-ceramic COUT with no bulk cap required at all; CIN wants a small damping cap given this board's long automotive-harness input leads, but far smaller than the electrolytic can it replaces. See "Buck IC switched to LMR33630" below for the full writeup. |
+
+## Buck IC switched to LMR50410 — board space, 2026-08-02 (corrected same session, LMR33630 → LMR50410)
+
+**LMR33630 (below) was the first pick, same session — superseded within the same session by a smaller candidate the user found.** Kept for the board-space rationale and the datasheet-confirmed ceramic-cap findings (both still apply, same class of part), but every specific part number/value in that section is replaced by the table below.
+
+**TI LMR50410 (LMR50410XDBVR), LCSC C2841056** — confirmed live (`lib_get_component_details`): Extended tier, 4,643 in stock, $0.43/unit. SOT-23-6 (JEDEC DBV0006A, 2.9×1.6mm body) — roughly **1/5 the board area of LMR33630's HSOIC-8**, and the real reason to prefer it over the first pick. Datasheet SLUSDW3A, direct PDF read (not a mirror), all 35 pages.
+
+| Property | LMR33630 (superseded pick) | **LMR50410 (final)** |
+|---|---|---|
+| Package | HSOIC-8, ~4.9×3.9mm | **SOT-23-6, 2.9×1.6mm** |
+| Vin | 3.8–36V | 4–36V (abs max 38V) — same margin over 28.8V ceiling |
+| Iout | 3A | 1A — still 2–5× margin over our 0.2–0.5A/0.45A loads |
+| Switching freq | RT-pin adjustable, not yet picked | **Fixed 700kHz** — one less open design decision |
+| COUT | 4×22µF ceramic bank (88µF) | **Single 22µF ceramic** (per Table 9-1, both the 3.3V and 5V rows) |
+| CIN | 10µF + 220nF ceramic | 2.2µF + 0.1µF ceramic |
+| Feedforward cap | Not needed only *conditionally* (RFBT ≤ 1MΩ rule) | **Never needed — not mentioned anywhere in the datasheet**, internal compensation handles it unconditionally |
+| CIN long-lead caveat | Yes, same class of warning | Same caveat present (§10, p.23) — this board's automotive-harness input still wants a small damping cap, same reasoning as before |
+| VREF / FB equation | 1V, Vout=VREF×(1+RFBT/RFBB) | **Same equation, same VREF (1.00V)** — the FB resistor values computed below carry over unchanged |
+| VOUT range | Fine for both targets | 1–28V confirmed (§7.3) — both 3.3V and 9V well inside |
+| CBOOT | 100nF | 0.1µF, X7R/X5R, ≥16V — same value, restated from LMR50410's own datasheet (§8.3.5/§9.2.2.7) |
+
+**FB divider — unchanged from the LMR33630 pass, since VREF is identical:**
+
+| Instance | Target Vout | RFBT | RFBB (computed) | Nearest E96 | Resulting Vout |
+|---|---|---|---|---|---|
+| 1a (Domain A) | 3.3V | 100kΩ | 43.48kΩ | 43.2kΩ | 3.31V (+0.4%) |
+| 1c (coil supply) | 9V | 100kΩ | 12.5kΩ | 12.4kΩ | 9.06V (+0.7%) |
+
+(LMR50410's datasheet recommends RFBT in the 10–100kΩ range rather than LMR33630's single 100kΩ recommendation — 100kΩ is still valid and inside that range, so no change needed.)
+
+**Inductor — derived directly from LMR50410's own design equation (§9.2.2.4, p.18), not copied from a table row**: LMIN = [(VIN_MAX−VOUT)/(IOUT×KIND)] × [VOUT/(VIN_MAX×fSW)], evaluated at our real Vin_max=28.8V, real per-instance load, fSW=700kHz, KIND=0.4 (mid-range of TI's stated 0.2–0.6):
+
+| Instance | Vout | Iout (design) | LMIN computed | Round up to standard value |
+|---|---|---|---|---|
+| 1a | 3.3V | 0.5A | 20.9µH | 22µH or 33µH |
+| 1c | 9V | 0.45A | 49.1µH | 56µH or 68µH |
+
+**Open items before this is schematic-ready:**
+- [x] **Inductor sourced, 2026-08-02, consolidated to one part for both instances (user's explicit call, BOM line count)** — **re-sourced same day after the coil-rail load estimate was revised from 0.45A to 0.7A max expected**. **Final pick: Chilisin LVS606045-330M-N, LCSC C285825**, 33µH, SMD 6×6mm, 1.4A rated / 2.3A saturation, 165mΩ DCR, Extended, 1,052 stock, $0.069, confirmed live via `lib_get_component_details`.
+  - **1a (3.3V, ~0.2-0.5A load, unaffected by the revision)**: 33µH clears the ~21µH minimum with real margin, well-oversized current-wise.
+  - **1c (9V, revised to 0.7A max)**: ripple current ΔIL≈268mA is fixed by Vin/Vout/fsw/L (doesn't depend on Iout) — at the new 0.7A load, KIND≈0.383, comfortably inside LMR50410's 0.2-0.6 range (was 0.595, tighter, at the old 0.45A estimate). The load revision instead broke the *current-rating* margin on the original pick: **SNR4030-330MT (C5127398, 4×4mm, 840mA rated/1.1A sat)** only cleared 0.7A by ~1.2× rated/~1.3× saturation — too thin for a part in this sealed, 65-85°C enclosure, per this project's own PTC-derating lesson (a part rated fine at 20-25°C derated well below its intended load at 85°C). New pick clears with real margin instead: 1.4A/0.7A = **2.0× rated-current margin**, 2.3A/0.834A-peak = **~2.76× saturation margin**.
+  - Retired parts, both superseded same session: SNR4030-330MT (C5127398, the first single-part consolidation pick) and SNR6045-680MT (C5127420, the original non-consolidated 9V-rail pick, retired even earlier).
+- [x] **PFM vs. FPWM resolved, 2026-08-02**: staying with **LMR50410XDBVR (PFM, C2841056)** — the FPWM alternative (XFDBVR, C5219371) was checked and its stock is too low for this build. Not revisited further.
+- [x] **FB divider resistors sourced, 2026-08-02, re-sourced same day for all-Basic tier.** First pass (shared 100kΩ RFBT + 43.2kΩ/12.4kΩ RFBB) got two Extended-tier resistors — no Basic-tier 0603 1% option exists at 43.2kΩ or 12.4kΩ in any brand checked. **Re-sourced against JLCPCB's live Basic-tier 0603 ±1% value set** (pulled directly from jlcsearch's resistor list, 80 confirmed-Basic values spanning 0Ω–10MΩ) rather than picking round numbers and hoping — swept that value set for the pair closest to each target ratio (RFBT/RFBB = Vout/VREF − 1). **User authorized different RFBT per instance** rather than forcing a shared value, which found a better fit than the original scheme:
+  - **1a (3.3V): RFBT = 6.2kΩ (C4260), RFBB = 2.7kΩ (C13167)** — both confirmed **Basic tier** live. Vout = 1.00×(1+6.2k/2.7k) = **3.30V** (−0.11%, tighter than the original 43.2k/100k pair's +0.4%).
+  - **1c (9V): RFBT = 24kΩ (C23352), RFBB = 3kΩ (C4211)** — both confirmed **Basic tier** live. Vout = 1.00×(1+24k/3k) = **9.00V exact**. 24kΩ RFBT sits inside LMR50410's datasheet-recommended 10-100kΩ range with lower divider standing current than a smaller-value alternative also considered (12kΩ/1.5kΩ, same ratio).
+  - All four resistors: UNI-ROYAL 0603WAF-series, deep stock (352k–3.7M units), ~$0.001/unit. Retires C22936/C23053/C22865 from the first pass entirely.
+- [ ] Source live LCSC parts: CIN 2.2µF X7R ceramic, CIN 0.1µF X7R ceramic bypass, COUT 22µF X7R ceramic (×1 per instance), CIN damping/bulk cap (tantalum or small polymer, value TBD, sized for damping not storage), CBOOT 0.1µF/≥16V.
+- [x] **Catch diode removal confirmed**: LMR50410 is fully synchronous (integrated low-side FET) — no external catch diode on either instance. Applied in subcircuit-capture-guide.md.
+- [ ] Quantify actual board-area win against the user's real space constraint once parts are placed — qualitative case is very strong (SOT-23-6 + 4×4mm/6×6mm inductors vs. TO-263 + 12×12mm is a large win) but no real footprint total computed yet.
+
+---
+
+## Buck IC switched to LMR33630 — SUPERSEDED same session by LMR50410 above, board space, 2026-08-02
+
+**Trigger: real physical fit problem, reported by user** — the LM2596S-ADJ (TO-263) + 68µH 12×12mm SMD inductor + SS34 (SMA/DO-214AC) catch diode solution does not fit in the available board space, in either buck instance. This is a different failure mode than the earlier cost/thermal tradeoffs this doc already worked through — those were about which *part* to use within the TO-263-class footprint; this is "that footprint class doesn't fit at all."
+
+**Re-sourced for small-package synchronous bucks, ≥28.8V Vin, live on LCSC.** Full comparison (bare small-package ICs, fully-integrated inductor-in-package modules, and smaller discrete inductors) is in the session log; bottom line:
+
+- No genuinely tiny package (SOT23-6/-8, WSON, small QFN) clears the 28.8V Vin ceiling — every candidate that small tops out well below it (e.g. MPS MP2315GJ-Z, TSOT23-8, 24V max — rejected outright).
+- **HSOIC-8/SO-8-class synchronous bucks are the real floor for this Vin range** — smaller than TO-263 (roughly half the board area) but not as small as hoped. Two live candidates: **LMR33630** (C841384, 3.8–36V, 3A) and **LM5164** (C477928, 4.5–100V, 1A). **User picked LMR33630** — cheaper, well-vetted in this project's earlier research (previously rejected only on a now-stale WiFi-thermal assumption, see below), simpler FB network (no mandatory ripple-injection network the way LM5164's COT topology requires).
+- Fully-integrated modules (inductor-in-package, e.g. LMZM33603) exist but came back with inconsistent stock/price between sources (~$5.62 vs $12+) and cost ~13× the bare IC — not pursued further this pass.
+
+**Why LMR33630 was rejected once already, and why that reason no longer applies:** this project evaluated LMR33630 vs. LM2596S-ADJ back in the original Domain-A-supply decision and picked LM2596 specifically for TO-263's larger thermal mass, sized against a **355mA WiFi TX peak**. WiFi/BLE was dropped from this design entirely on 2026-08-01 (CAN-only control path) — real Domain A load is now ~0.2A, no radio bursts. The thermal objection that ruled out LMR33630 the first time was already stale before this board-space problem even came up; re-evaluating now just closes that loop.
+
+**Ceramic-cap capability — confirmed by direct PDF read of TI's SNVSAN3F datasheet (not a mirror or search snippet), per this project's own "re-verify load-bearing figures against the primary source" rule:**
+
+| Cap role | Datasheet guidance | Bulk/electrolytic required? |
+|---|---|---|
+| COUT | 4×22µF X7R/X5R ceramic (typical-app example); min 52µF / max ESR 0.11Ω per the datasheet's own Eq.6 | **No — datasheet states no bulk cap needed, ever.** Real, unconditional area win over the retired electrolytic COUT scheme. |
+| CIN | 10µF ceramic (X7R or better) + 220nF high-freq bypass ceramic | **Conditional.** Datasheet's Power Supply Recommendations (p.32) warns ceramic-only CIN can ring with an underdamped LC resonance when the input source has long leads/high impedance — framed as "if long input leads/traces are used," not a blanket requirement the way LM2596's ceramic warning was. |
+
+**This board's actual install is exactly the conditional case the datasheet flags** — the input is fed through a multi-meter automotive wiring harness, not a benchtop supply a few cm away. **Decision: keep a small damping/bulk cap at CIN, sized for damping, not for storage** — a modest tantalum or polymer part, single-digit-to-tens of µF, in a case size far smaller than the ~D6.3×7.7mm electrolytic can it replaces (that part was sized to hold ~94-100µF of bulk charge; a damping cap's job is different and needs much less capacitance). **Specific part not yet sourced — open item below.**
+
+**FB divider, both outputs** — LMR33630 uses VREF = 1V, RFBT recommended 100k�text (max 1MΩ), Vout = VREF×(1+RFBT/RFBB):
+
+| Instance | Target Vout | RFBT | RFBB (computed) | Nearest E96 | Resulting Vout |
+|---|---|---|---|---|---|
+| 1a (Domain A) | 3.3V | 100kΩ | 43.48kΩ | 43.2kΩ | 3.31V (+0.4%) |
+| 1c (coil supply) | 9V | 100kΩ | 12.5kΩ | 12.4kΩ | 9.06V (+0.7%) |
+
+At RFBT=100kΩ, the datasheet's own Cff rule (needed only above ~1MΩ RFBT, confirmed directly against the real threshold, not VOUT) means **no feedforward cap is required on either instance** — simpler than the old LM2596 scheme, which needed one on the 9V rail per TI's Table 9-6.
+
+**Other confirmed requirements from the direct datasheet read**: CBOOT = 100nF (bootstrap, standard), CVCC = 1µF, inductor per the typical-app example is 8µH at 400kHz switching frequency — a real change from LM2596's 68µH/150kHz, since switching frequency and topology both changed. **Inductor value not yet re-derived for this design's actual Vin range/load** — TI's 8µH example was for a 5V-output, fixed-frequency design point, not directly transferable to our 3.3V/9V outputs without redoing the standard buck inductor sizing math (L = (Vin−Vout)×Vout / (Vin×Fsw×ΔIL)) at whatever switching frequency gets set via the RT pin. Flagged as an open item, not guessed at here.
+
+**Open items before this is schematic-ready:**
+- [ ] Re-derive inductor value/current rating for both instances at LMR33630's actual switching frequency (RT-pin-selectable, 200kHz–2.2MHz; TI's own example uses 400kHz) — the old 68µH/12×12mm part was sized for LM2596's 150kHz and is not a valid carryover.
+- [ ] Source live LCSC parts for: CIN 10µF X7R ceramic, CIN 220nF X7R ceramic, COUT ceramic bank (value TBD — right-size against our real ~0.2–0.5A/0.45A loads rather than copying TI's 3A-class 4×22µF example, same discipline already applied once to the LM2596's CIN sizing), CIN damping/bulk cap (tantalum or small polymer, value TBD), CBOOT 100nF, CVCC 1µF, RFBT/RFBB pairs (100kΩ/43.2kΩ for 1a, 100kΩ/12.4kΩ for 1c).
+- [ ] Confirm LMR33630 (C841384) Basic/Extended tier live — earlier note says "Basic: no" (Extended) from a `lib_get_component_details` pull; re-confirm before lock, same as any other Extended part.
+- [ ] Quantify the actual board-area win once the above parts are sized — the qualitative case (SO-8 vs TO-263, ceramic vs electrolytic) is strong, but no real footprint total has been computed against the user's actual space constraint yet.
+- [ ] D5/D6 catch-diode question: LMR33630 is fully synchronous (integrated low-side FET) — **confirm the external SS34 catch diode (D5/D6) is no longer needed at all**, not just smaller. This wasn't explicitly re-confirmed this pass; synchronous bucks normally don't need one, but say so directly before deleting two BOM lines.
 
 ## Harness connector — measured pinout
 
@@ -96,11 +191,11 @@ Pin 1 (coil common) vs. pins 13/14 (chassis) are three separate wires, not obvio
   ~1-2A-rated part, this input only ever sees ~0.2A. Source-select FET
   is a SEPARATE P-FET from the reverse-polarity one, in series after it.
 
-  Domain B logic supply (PCA9555 + gate-drive stage):
-  ordinary non-isolated 12V/9V→3.3V or 5V regulator, sourced from
-  harness A+ — Domain B is already chassis-ground referenced, same
-  as the coil supply, so no separate isolation is needed for this
-  rail.
+  Domain B logic supply (PCA9555 + I2C isolator secondary side):
+  COIL_9V -> 3.3V via U6 (AMS1117-3.3 LDO) -- confirmed 2026-08-02,
+  see "Domain B logic supply" section below. Domain B is already
+  chassis-ground referenced, same as the coil supply, so no separate
+  isolation is needed for this rail.
 ```
 
 ### Why Domain A's power can't come from harness A+ (fixed this session)
@@ -136,7 +231,41 @@ Note: coil resistance rises with temperature (copper's positive tempco), so at a
 
 **Decision: locked to LM2596S-ADJ (C963385), same part as #1a.** One fewer distinct BOM line to stock/qualify; XL4015E1's only edge (5A vs 3A rating) isn't needed at 0.45A, and it's already excluded from #1a's role anyway.
 
-### Support passives for both LM2596S-ADJ instances — TI's actual selection framework
+### Node-ID address input — design discussion, 2026-08-02, corrected twice same day
+
+**Scope note: this section is discussion/decision-log only.** Per explicit instruction this pass, Gate 1 (part sourcing) and Gate 2 (schematic capture) are both deliberately skipped here — no switch/header part numbers pulled, nothing drawn in KiCad.
+
+**Original decision (superseded within the same session): 4 bits off 4 of the PCA9555's spare I/O pins.** Reconsidered and corrected — **PCA9555 is the wrong side of the isolation barrier for this.** Per this doc's own topology diagram, Domain B's logic supply (which powers the PCA9555) is sourced from harness A+, full stop — it has no independent path, unlike Domain A which can run from USB alone with no vehicle harness connected at all (see "Domain A power entry" decision, above). A unit sitting on a bench for firmware flashing, testing, or field diagnosis over USB-only power would have **zero way for the ESP32 to learn its own node ID** if that value lives behind an unpowered PCA9555 — the I2C read would simply never complete. This isn't a hypothetical corner case; USB-only bench operation is exactly the scenario firmware development and field troubleshooting happen in.
+
+**Corrected decision: 4 address bits, read directly by 4 ESP32-C3 GPIOs on Domain A** — no PCA9555, no I2C read, no dependency on Domain B power at all. Works identically whether ORC is bench-powered over USB, running on the DC terminal alone, or fully installed on vehicle power. Gives node IDs 1–15 (0 reserved/unset), same as before. Firmware reads the 4 GPIOs directly at boot (plain digital read, no bus transaction) and uses that value as CANopen `NodeID` in the COB-ID scheme already documented in can-protocol-research.md.
+
+**Component choice, same day**: user picked a **4-position DIP switch** over a 2.54mm header+shunt-jumper block — same electrical function (4 independent lines, each pulled to a defined state and shorted to the opposite state to set a bit), but a DIP switch avoids loose shunt jumpers that can be lost or dropped inside a sealed enclosure during field service, and is flip-to-set rather than pull-and-place. Not yet sourced (Gate 1 pending) — any real 4-position through-hole DIP switch (e.g. the common Copal/CHERRY/Nidec-Copal SPST 2.54mm-pitch style already ubiquitous on JLCPCB) is a reasonable starting search, nothing locked.
+
+**Labeling convention, same day**: bit-numbered labeling (`BIT0`–`BIT3`) was flagged as needlessly complex for an installer setting an address in the field — it requires translating bit position to decimal value in your head. **Decision: label each switch position by its decimal weight, not its bit index** — silkscreen (and the DIP switch's own printed numbering, most of these parts ship pre-numbered 1–4 anyway, so this maps directly) reads `1  2  4  8`, and the installer sets a node ID by summing the ON positions (e.g. ID 5 = positions `1` and `4` ON). Standard, well-precedented convention — the same pattern used for decades on RS-485/Modbus slave-address DIP switches and old ISA-card IRQ jumpers, chosen specifically because addition is easier than binary-to-decimal translation. Internal net/schematic names stay bit-indexed (`NODE_ID0`–`NODE_ID3`, matching firmware's bit positions) since that's an engineering reference, not something the installer reads — only the physical silkscreen uses the weight labels.
+
+**Side benefit**: this also removes the collision risk with `hardware/relay_drive.kicad_sch` (where the PCA9555 lives, and where a parallel session has had live uncommitted edits throughout this project) — the switch now belongs on `mcu.kicad_sch`, which that session hasn't touched. Physical part selection and net-to-pin assignment are still deferred to the Gate 1/2 pass.
+
+**Open items:**
+- [ ] PCA9555 pin budget: **reverts to 10-of-16 used, 6 spare** — the node-ID feature no longer touches Domain B at all. Update subcircuit-capture-guide.md's PCA9555 line to remove the earlier "pending update to 14-of-16" note.
+- [ ] Source a specific 4-position DIP switch part (Gate 1 — live catalog, package, actuation force/cycle life for a sealed-enclosure field-serviceable input).
+- [ ] Pick the specific 4 ESP32-C3 GPIOs for `NODE_ID0`–`NODE_ID3` once a specific Super Mini listing is bought and its full pinout (not just the currently-documented SDA/SCL/UART subset) is confirmed — subcircuit-capture-guide.md's MCU section already flags the exact listing as still unpicked.
+- [ ] Confirm pull-up/pull-down direction and default (switch-open) state against whatever GPIOs get picked — some ESP32-C3 pins have fixed internal strapping behavior at boot that needs checking before they're assigned to this function, same discipline already applied to the GPIO8/9 strapping question above.
+
+### Coil-supply (9V) power gating — proposed, then reverted, same session, 2026-08-02
+
+Original ask: default the coil supply (#1c, LM2596S-ADJ generating `COIL_9V`/`V_COIL_IN`) OFF, ESP32-enabled over I2C on relay-switching activity, 60s idle auto-disable, to cut standing buck losses. While designing the control path, this surfaced a real blocking contradiction: `circuit-draft.md`'s topology diagram states Domain B logic (which powers the PCA9555 itself) is sourced from harness A+ directly, independent of the switched coil rail — but `subcircuit-capture-guide.md`'s Domain B logic-supply BOM table (U6, AMS1117-3.3) still reads `COIL_9V → 3.3V`. If that second wiring were what actually got built, gating `COIL_9V` off would have stranded the PCA9555 with no way to ever re-assert its own enable pin — a self-bricking feature.
+
+**Reverted, not resolved-and-built**: user judgment call — quiescent draw on this buck isn't significant against the design's actual power budget (10 coils × 45mA/coil dominates), not worth the added complexity or the risk of shipping the deadlock above if the contradiction went unnoticed. Coil supply runs continuously, no enable/gating hardware, no PCA9555 pin spent on it. (The node-ID address input has since moved off the PCA9555 entirely too, see below — Domain B's pin budget is back to 10-of-16 used, 6 spare, untouched by either feature.)
+
+**The underlying Domain-B power-source contradiction is still real and still open** — it just isn't a hard blocker for this particular feature anymore, since there's no gating hardware to strand. Still worth fixing on its own merits (see subcircuit-capture-guide.md's flag banner and the open item below), since an ambiguous power source for a logic-critical rail is a latent problem regardless of whether anything gates it.
+
+**Open items:**
+- [x] **Resolved 2026-08-02, user confirmed**: Domain B logic supply is `COIL_9V → 3.3V` via U6 (AMS1117-3.3 LDO) — this rail powers the PCA9555 I2C GPIO expander and the ADuM1250 I2C isolator's Domain-B-side, matching `subcircuit-capture-guide.md`'s U6 line. Topology diagram caption corrected to match (was stale, said "harness A+ direct"). Dissipation math for this LDO: (9V−3.3V)×I — see the MCU-power discussion in this session's log for the general treatment; not a concern raised for this specific rail since it's IO-expander/isolator logic current, not the MCU's own supply.
+- [x] **U6 sourced, same day**: **AMS1117-3.3, LCSC C6186**, SOT-223, confirmed live via `lib_get_component_details` (jlcsearch) — **Basic tier**, 1,490,681 in stock, ~$0.151/unit. No reel-loading fee risk. See subcircuit-capture-guide.md's "Domain B logic supply" section.
+
+### Support passives for both LM2596S-ADJ instances — SUPERSEDED 2026-08-02, TI's actual selection framework
+
+**Superseded by "Buck IC switched to LMR33630" above** — the regulator IC changed for board-space reasons, so every LM2596-specific passive value below (inductor E·T sizing, catch diode, feedback resistors under the old part's VREF/equations) is stale. Kept for record only, per this doc's own convention for superseded decisions.
 
 Pulled directly from TI's SNVS124G PDF (the real ti.com file, downloaded and read directly — not a third-party mirror; an earlier research pass used a mirror with the right general structure but unconfirmed figure numbers). **Both 1a and 1c are the adjustable version**, so the design path below (Figure 9-8, E·T-based) applies to both — the fixed-voltage nomographs (Figures 9-5/9-6/9-7) don't apply here.
 
@@ -191,19 +320,49 @@ Consequence: **catch diode reverse-voltage requirement drops from ≥45V to ≥3
 
 CIN's voltage-rating requirement drops from ≥54V to ≥43.2V (50V standard step) — **checked whether this unlocks a single higher-capacitance SMD polymer part and it does not**: pulled Nichicon's own PCR-series datasheet directly, and the entire polymer family tops out at 180µF at 50V (lower than hoped, and that specific part is out of stock at LCSC anyway) — capacitance drops as voltage rating rises across the whole technology, so lowering Vin doesn't rescue the "big single polymer cap" approach. See below for how CIN actually got resolved instead.
 
-### CIN right-sized for actual load — not copied from TI's 3A reference example
+### CIN/COUT consolidated to one SMD Al-electrolytic part number, 2026-08-02 (corrected same day — cost) — SUPERSEDED, same session, board-space/IC switch
+
+**Superseded by "Buck IC switched to LMR33630" above** — LMR33630 goes all-ceramic on COUT (no bulk cap at all) and needs only a small damping cap on CIN, not a sized-for-storage electrolytic bank. Everything below (including the KNSCHA C3445238 pick) is stale. Kept for record only.
+
+**First pass (superseded within the same session):** consolidated CIN+COUT onto Nichicon PCR1J470MCL1GS (C3274436), a 47µF/63V SMD polymer part, ×2 for CIN / ×3 for COUT. **User flagged this as too expensive** and supplied a cheap SMD Al-electrolytic alternative (Jieerrui MA35V100M6X8, C46550467, 100µF/35V, ~$0.17–0.23/unit) as the style of part to re-source against.
+
+**Voltage-rating check on the user's candidate — it fails the CIN role.** TI's own SNVS124G datasheet (§9.2.2.2.6, adjustable-output worked example) states the input-cap voltage rating must be **≥1.5×Vin(max)**, rounded up to the next standard voltage step — TI's own example: 28V ceiling → 42V required → next step is 50V, so "a 50-V capacitor must be used." At our 28.8V ceiling, that's ≥43.2V → also the 50V step. **A 35V-rated part cannot serve CIN at this design's Vin ceiling, only COUT** (COUT's floor is ≥1.5×Vout = 13.5V for the 9V instance, which 35V clears easily). This is TI's own worked-example arithmetic, not just our restated rule.
+
+**Re-sourced for a cheap 50V+ part that still allows single-part consolidation.** Found several D6.3×L7.7mm SMD Al-electrolytic candidates at 50V — cheaper per-unit than even the user's 35V find:
+
+| MPN | LCSC | Cap/V | Price (1 unit) | ESR / ripple confirmed? |
+|---|---|---|---|---|
+| DMBJ RVT1H470M0607 | C970679 | 47µF/50V | ~$0.03 | No — catalog-only, ripple listed as 66mA@120Hz, ESR not listed |
+| **KNSCHA RX100UF50V90RV0105 (selected)** | **C3445238** | **100µF/50V** | **~$0.11** | No — catalog-only, neither ESR nor ripple listed |
+| Panasonic EEEFTH101XAP | C165974 | 100µF/50V | ~$0.30 | **Yes** — 340mΩ ESR, 350mA ripple, real datasheet |
+
+**Decision: KNSCHA RX100UF50V90RV0105, LCSC C3445238, 100µF/50V.** User's explicit call after being shown the gap: neither cheap 50V candidate has a fetchable manufacturer datasheet (both resolve to LCSC catalog-page-only data; DMBJ has no independent datasheet site, KNSCHA's corporate site doesn't publish a part-specific PDF) — ESR and rated ripple current are **unconfirmed** for the selected part, a real Gate 1 gap per hardware-workflow.md ("don't lock BOM while any line carries an open verification item"), accepted anyway on cost grounds rather than paying ~3× for the datasheet-confirmed Panasonic part. Flagged as a bench-verify item, consistent with how this doc already treats other unconfirmed-but-accepted numbers (LM2596S-ADJ light-load efficiency, USB/DC-terminal handoff behavior).
+
+**Sizing, both roles, both instances (1a and 1c):**
+
+| Role | Qty parallel | Total cap | vs. requirement |
+|---|---|---|---|
+| CIN | ×1 | 100µF | Clears the ~78µF scaled-from-TI target (see "CIN right-sized" below) in a single unit — fewer parts than the old 2× scheme |
+| COUT | ×2 | 200µF | Within TI's 82–820µF window, closer to the original 220µF target than the polymer scheme's 141µF |
+
+Net result vs. the first-pass polymer plan: 3 physical caps per buck instance instead of 5 (6 total on the board instead of 10), same single BOM line, and roughly 3-5× cheaper per unit. Voltage margin at CIN (50V vs. a 43.2V requirement, ~16% headroom) is real but tighter than the polymer part's 63V — worth keeping in mind if the Vin ceiling assumption (28.8V) ever moves.
+
+**Open flags, not blockers, both carried to bench test:**
+- ESR unconfirmed for C3445238 — TI's qualitative warning against ceramic-only ultra-low-ESR instability doesn't give a hard minimum, so this isn't confirmed problematic, just unverified.
+- Rated ripple current unconfirmed for C3445238 — CIN role now runs on a single unit (no parallel-current-sharing margin the way the old ×2/×3 polymer scheme had); confirm the part's ripple rating clears our ~0.1–0.4A rms requirement before this is considered closed.
+
+### CIN right-sized for actual load — not copied from TI's 3A reference example — SUPERSEDED 2026-08-02 (LM2596-specific reasoning; CIN is now a small ceramic + damping cap under LMR33630, see "Buck IC switched to LMR33630")
 
 **The real fix wasn't sourcing harder, it was noticing 470µF was never derived for this design.** That value came from TI's generic Figure 9-13 circuit, sized for their 3A reference load. TI's own input-cap sizing rule is RMS-ripple-current-driven, not a fixed universal number: "select a capacitor with a ripple current rating of approximately 50% of the DC load current" (75% at higher ambient). At 3A that demands real bulk capacitance; at our actual ~0.2–0.5A load, the same rule asks for a cap rated for only ~0.1–0.4A RMS ripple — trivial, and nowhere near what 470µF's worth of bulk is sized to buy. Scaling TI's reference value by load current (470µF × 0.5A/3A ≈ 78µF) lands right around what's already confirmed and in stock.
 
 **Decision: CIN = 2× 47µF/63V in parallel (~94µF total)**, using the already-confirmed **Nichicon PCR1J470MCL1GS, LCSC C3274436** (D10×L8mm SMD polymer, 3,977 in stock). Small footprint, no stock risk, no absurd parallel count, genuinely derived for this load rather than copied from a 3A example. Supersedes both the single 470µF/63V low-stock wet-electrolytic (Lelon C249674, only 10 units) and the earlier 10-caps-in-parallel option (which would have cost ~4× more board area than a single large cap — confirmed by direct footprint math, splitting into many small units is not automatically a space win for cylindrical polymer/electrolytic technology).
 
-### Sourced parts — LM2596S-ADJ passives
+### Sourced parts — LM2596S-ADJ passives — SUPERSEDED 2026-08-02, see "Buck IC switched to LMR33630"
 
 Live LCSC/JLCPCB sourcing pass against the locked values above. **Caps are SMD polymer per explicit preference — no THT radial caps below.**
 
 - **L1, 68µH (both instances)**: **KOHERelec MDA1870-680M**, LCSC **C3015595**. 8A rated, 66mΩ DCR, SMD pad-mount 17.8×16.9mm — large-footprint SMD, not a small chip inductor, but board has room. 193 in stock. **Tier unmarked on the fetched page — treat as Extended until verified.**
-- **CIN, ~94µF/63V (both instances, 2× parallel)**: **Nichicon PCR1J470MCL1GS**, LCSC **C3274436**, 47µF/63V SMD polymer, D10×L8mm, 3,977 in stock. Right-sized for our ~0.2–0.5A load per the derivation above — supersedes the earlier 470µF-target approach entirely.
-- **COUT, 220µF/35V (both instances)**: polymer exists at this value. **NJCON 2210350810R00**, LCSC **C5243827**, solid polymer, Ø8×10.5mm, 405 units in stock — matches the stated preference. If 405 units is too thin for the actual run quantity, fallback is **ROQANG RVT1V221M0810**, LCSC **C72498**, SMD wet electrolytic (AEC-Q200), same Ø8×10.2mm footprint, 117,760 units — deep stock but not polymer.
+- **CIN and COUT, single part, both instances**: **KNSCHA RX100UF50V90RV0105**, LCSC **C3445238**, 100µF/50V SMD aluminum electrolytic, D6.3×L7.7mm, ~$0.11/unit, 41,982 in stock at last check, Extended tier. **CIN role: ×1 parallel (100µF)**. **COUT role: ×2 parallel (~200µF)**. Corrected 2026-08-02 (same session) from an earlier Nichicon polymer pick (C3274436, 47µF/63V) on cost grounds — see "CIN/COUT consolidated" decision above for the full re-sourcing pass, the TI voltage-rule check that ruled out a cheaper 35V candidate for the CIN role, and the open ESR/ripple-current verification flag. Supersedes the earlier 470µF-target CIN approach, both original COUT candidates (NJCON 2210350810R00/C5243827, ROQANG RVT1V221M0810/C72498), and the Nichicon polymer consolidation — all retired.
 - **CIN bypass, 1µF/100V X7R (both instances)**: **Samsung CL31B105KCHNNNE**, LCSC **C13832**, 1206, 1,204,700 in stock. Added in parallel with the CIN polymer pair for HF decoupling right at the IC pin — standard practice, negligible board cost, does not replace the bulk polymer caps (TI explicitly warns ultra-low-ESR ceramic-only bypassing can cause instability/ringing on this IC family).
 - **COUT bypass, 1µF/50V X7R (both instances)**: **Samsung CL21B105KBFNNNE**, LCSC **C28323**, 0805, Basic tier, 880,220 in stock. Same role, output side.
 - **D1, catch diode (both instances)**: **MDD (Microdiode Semiconductor) SS34**, LCSC **C8678**, 40V/3A Schottky, SMA(DO-214AC) SMD package, JLCPCB Basic, 2,374,628 in stock. Confirmed live 2026-08-01. Meets the ≥36V requirement (1.25×28.8V) with ~11% headroom and is the exact TI Fig 9-13 bracket part; 3A is far above the 0.2–0.5A buck load. Chosen as the single board-wide diode type (also covers coil flyback if needed), replacing SS56/C65009 — trades SS56's extra reverse margin for one-part-number simplicity and deeper stock. History: earlier used High Diode C466505, then SS56 C65009.
@@ -277,8 +436,8 @@ All parts below came from a live JLCPCB/LCSC catalog search. Basic/Extended stat
 
 | # | Function | Part | LCSC | Basic/Extended | Confidence |
 |---|---|---|---|---|---|
-| 1a | Domain A supply — single-stage buck, USB VBUS (5V) or vehicle rail (up to 36V) → 3.3V direct, no LDO | **LM2596S-ADJ** (selected) | C963385 | Extended | Vin 4.5–40V (datasheet-confirmed), TO-263, 3A-rated (8.5×+ margin over the 355mA WiFi TX peak). Selected over LMR33630 (SO-8, synchronous, better rated efficiency) for TO-263's thermal-tab margin against this design's sealed-enclosure risk, plus ~3-4× lower cost. **Light-load efficiency/dissipation not in TI's datasheet — verify on bench**, don't assume best-case. XL4015E1 excluded from this role — datasheet min input is 8V, can't run from bare USB 5V. |
-| 1c | Coil supply, 9V out, up to 32V in | **LM2596S-ADJ** (selected — locked to same part as #1a) | C963385 | Extended | Vin 4.5–40V, clears 32V requirement with margin, adjustable via FB resistors set to 9V. 3A rating gives ~6.7× margin over the measured 0.45A total coil current (10 × 45mA, room temp). Locked to the same part as #1a — one fewer distinct BOM line; XL4015E1's only edge (5A rating) isn't needed at this load. **No fixed-9V/10V/12V module met the 32V-input margin in the earlier catalog pass — adjustable IC + feedback resistors is the only path found.** |
+| 1a | Domain A supply, Vin (up to 28.8V) → 3.3V | ~~LM2596S-ADJ~~ → ~~LMR33630~~ → **LMR50410** (final, 2026-08-02, board space) | C2841056 | Extended, confirmed live: 4,643 in stock, $0.43/unit | SOT-23-6 (2.9×1.6mm — ~1/5 the area of the superseded LMR33630 HSOIC-8 pick), 4–36V, 1A, synchronous, single 22µF ceramic COUT (no bulk cap, no feedforward cap ever), fixed 700kHz. Replaces both LM2596S-ADJ (didn't fit) and LMR33630 (fit but not as well as this part). See "Buck IC switched to LMR50410" for the full writeup and open items (part sourcing for CIN/COUT/inductor, PFM-vs-FPWM variant choice not yet resolved). |
+| 1c | Coil supply, Vin (up to 28.8V) → 9V | ~~LM2596S-ADJ~~ → ~~LMR33630~~ → **LMR50410** (same part as #1a, final 2026-08-02) | C2841056 | Extended, confirmed live: 4,643 in stock, $0.43/unit | Same part as #1a, one BOM line for both instances. FB divider computed: RFBT=100kΩ/RFBB=12.4kΩ → 9.06V (same VREF as the superseded LMR33630 pick, so this math carried over unchanged). See "Buck IC switched to LMR50410". |
 | 2 | I2C isolator (SDA/SCL, 1 part covers the whole barrier) | ADUM1250ARZ-RL7 | C13839 | Extended | High confidence it's the right *kind* of part — 2-ch isolated I2C buffer, open-drain both sides, hot-swap safe, ~2500Vrms per datasheet mirror. Medium confidence on exact isolation-voltage/data-rate figures — full ADI Rev. L table not pulled yet, confirm before lock. |
 | 3a | I2C GPIO expander, 16-bit (10 used), Domain B side | PCA9555PW | *verify LCSC #, prior pull gave TSSOP-24 C9900150829 — recheck, that's an unusual LCSC number format* | Extended | Open-drain outputs can't source the P-FET gate directly — needs level-shift stage below. |
 | 3b | Per-channel NPN level-shift/gate driver (×10) | MMBT2222A | *not yet verified on live catalog* | Likely Basic, unconfirmed | Pulls high-side P-FET gate low to switch each channel on. |
@@ -316,6 +475,7 @@ All parts below came from a live JLCPCB/LCSC catalog search. Basic/Extended stat
 - [ ] Size the gate-drive divider/NPN stage for the USB-presence-detect source-select FET — same topology as the coil-driver chain (MMBT2222A + P-FET) but a new instance, values not yet worked out.
 - [ ] Re-confirm USB-IF's 4.4V worst-case VBUS floor against the primary usb.org spec text (§7.2.2) — the figure used to reject diode-OR came from secondary sources, not the spec PDF itself (fetch was blocked this pass).
 - [x] Source live LCSC/JLCPCB parts for L1, D1, R1, and COUT (with a polymer/wet-electrolytic choice) — see "Sourced parts" above. **Still open**: pin live LCSC C-numbers for R2 (1.69kΩ and 6.34kΩ, 0805 1%) and CFF (1.5nF C0G 0805) — both confirmed to exist as parts but not yet confirmed as live LCSC listings after two search passes; needs a direct LCSC.com check, not another automated pass.
+- [ ] **Confirm ESR and rated ripple current for C3445238 (KNSCHA 100µF/50V)** before this line is considered closed — both are catalog-page-only, no independently fetchable manufacturer datasheet found this pass. Ripple current matters most for the CIN role, which now runs on a single unit with no parallel-current-sharing margin. Try requesting the datasheet directly from KNSCHA (contacts found: cathy@knscha.com, Vivan.liu@knscha.com) or pulling LCSC's PDF via a browser session rather than programmatic fetch. See "CIN/COUT consolidated" decision, 2026-08-02.
 - [x] CIN stock risk resolved — superseded the 10-unit-stock 470µF/63V part entirely by right-sizing CIN to ~94µF (2× the deep-stock 47µF/63V C3274436, 3,977 units) once it was clear 470µF was copied from TI's 3A reference example rather than derived for our actual ~0.2–0.5A load. No further action needed here.
 - [ ] Verify Basic/Extended tier for L1 (C3015595) and all newly-sourced passives above — none had a clean tier badge in this pass's automated fetch.
 - [x] Input protection (TVS and PTC fuse both) — removed from scope entirely, see BOM #4. The 85°C-derating chase (2920L075/60 → 2920L110/60 → 2920L150) is documented in hardware-workflow.md as a general lesson even though the part itself didn't ship.

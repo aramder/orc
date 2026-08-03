@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "AramLib")(type "KiCad")(uri "${KIPRJMOD}/AramLib.pretty")(options "")(descr "ORC project-local custom footprints"))
+)

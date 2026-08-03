@@ -7,9 +7,20 @@
 *.kicad_prl
 fp-info-cache
 *.bak
+*.bak_*
 *.kicad_pcb-bak
 *.sch-bak
 *.lck
+
+# JLCPCB plugin exports (gerbers, drill files, BOM/CPL, zip) and its local
+# SQLite cache (project.db) -- fully regenerable from the current PCB via
+# the JLCPCB plugin's "Fabrication Toolkit" export, not authoritative.
+hardware/jlcpcb/
+
+# Stale footprint-generation leftover, superseded by hardware/AramLib.pretty/
+# (the library actually registered in fp-lib-table) -- kept appearing as an
+# untracked directory from an earlier ESP32-C3-SuperMini.kicad_mod pass.
+hardware/footprints/
 
 # Editor local-history (nested git repo from VSCode Local History) -- never commit
 .history/

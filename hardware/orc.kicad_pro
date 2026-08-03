@@ -60,7 +60,7 @@
           "hatch_smoothing_level": 0,
           "hatch_smoothing_value": 0.1,
           "hatch_thickness": 1.0,
-          "min_clearance": 0.5,
+          "min_clearance": 0.0,
           "min_island_area": 10.0,
           "min_thickness": 0.25,
           "pad_connection": 1,
@@ -661,7 +661,7 @@
         "uuid": "dfe8a5cf-95d8-40b2-99f0-435f7d912c24"
       }
     ],
-    "used_designators": "D1-7,L1-4,#PWR1-34,#PWR37-44,#PWR59-60,#PWR66,#PWR116,C1-18,C21-29,RB1-10,R1-36,J1-7,U1-10,SW1-3,#PWRa315-316,C11B1,C1B1,F1-2,PF1-6,Q1-5,QN1-10,QP1-10,RP1-10,MNT1-4",
+    "used_designators": "#PWR1-102,#PWR116,#PWR200-202,#PWR206-207,L1-5,D1-19,C1-30,J1-7,RB1-10,R1-38,U1-10,SW1-3,#PWRa315-316,C11B1,C1B1,RN1,F1-2,PF1-6,Q1-29,QN1-11,QP1-11,RP1-10,MNT1-4",
     "variants": []
   },
   "sheets": [
@@ -688,6 +688,14 @@
     [
       "aba1bba0-b74d-454b-8f0e-c183dec674ff",
       "Power Side B"
+    ],
+    [
+      "dc956131-34e4-47b5-b1b6-dd73d8b73b30",
+      "I2C Expander"
+    ],
+    [
+      "12479d80-f751-406d-999d-23e59507feae",
+      "Relay Drive"
     ]
   ],
   "text_variables": {},
