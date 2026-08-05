@@ -2,7 +2,7 @@
 
 **These are bring-up and verification sketches, not ORC's application firmware.** They exist to answer one narrow question — does the MCU pinout the hardware side has settled on actually work at the IO level? — before real application logic (relay control, CAN message handling) gets written. See [`.claude/firmware-io-verification-prompt.md`](../.claude/firmware-io-verification-prompt.md) for the task this directory was created to satisfy.
 
-**No ORC board exists yet.** No ORC board has been fabricated and no specific "ESP32-C3 Super Mini" listing has been bought (see [`docs/subcircuit-capture-guide.md`](../docs/subcircuit-capture-guide.md)'s OPEN ARCHITECTURE DECISION section) — nothing here has run against ORC's actual hardware, and no PCA9555 or SN65HVD230 has been tested. All four sketches build successfully (verified: `pio run -e i2c_scanner -e pca9555_bringup -e uart_can_bringup -e can_address_bringup`, all SUCCESS against the `esp32-c3-devkitm-1` stand-in board), and two of them have also run live on a bare, generic ESP32-C3 dev kit connected to this session's machine (nothing else attached to it) — see "Real-hardware run, 2026-08-01" below for exactly what that does and doesn't confirm. `can_address_bringup` and the address-print addition to the other three sketches (added 2026-08-04) are build-verified only, not yet re-flashed to real hardware — the dev kit used for the earlier run was no longer enumerated on this machine when this pass ran. Treat any claim in this directory carefully: "runs on a generic ESP32-C3 dev kit" is not the same thing as "verified on ORC's board," since the PCA9555 and SN65HVD230 pieces of the design are still completely untested.
+**No ORC board is in hand yet.** As of 2026-08-04 the board has been **sent out to fab** (per `hardware/mcu.kicad_sch`'s U7 — a real, built ESP32-C3-SuperMini symbol/footprint, not just a placeholder) but hasn't come back — nothing here has run against ORC's actual hardware, and no PCA9555 or SN65HVD230 has been tested. All four sketches build successfully (verified: `pio run -e i2c_scanner -e pca9555_bringup -e uart_can_bringup -e can_address_bringup`, all SUCCESS against the `esp32-c3-devkitm-1` stand-in board), and two of them have also run live on a bare, generic ESP32-C3 dev kit connected to this session's machine (nothing else attached to it) — see "Real-hardware run, 2026-08-01" below for exactly what that does and doesn't confirm. `can_address_bringup` and the address-print addition to the other three sketches are build-verified only, not yet re-flashed to real hardware — the dev kit used for the earlier run was no longer enumerated on this machine when this pass ran. **Firmware's pin assignment was corrected once already, same day, after the board had already gone to fab** — see "CAN node address, as-fabbed" below; the schematic is now the source of truth firmware must match, not the other way around. Treat any claim in this directory carefully: "runs on a generic ESP32-C3 dev kit" is not the same thing as "verified on ORC's board," since the PCA9555 and SN65HVD230 pieces of the design are still completely untested.
 
 ## Board stand-in
 
@@ -10,24 +10,33 @@
 
 ## Pin assignment under test
 
-Per `docs/subcircuit-capture-guide.md`'s MCU section (updated 2026-08-04) — full 13-GPIO "Super Mini" header pinout (GPIO0-10, GPIO20, GPIO21):
+Per `hardware/mcu.kicad_sch` (U7, as-fabbed) and `docs/subcircuit-capture-guide.md`'s MCU section — full 13-GPIO "Super Mini" header pinout (GPIO0-10, GPIO20, GPIO21):
 
 | Function | Pins |
 |---|---|
 | I2C (SDA/SCL) | GPIO8 / GPIO9 |
 | UART (TX/RX, to SN65HVD230) | GPIO21 / GPIO20 |
-| CAN node address (bit0-bit3) | GPIO0 / GPIO1 / GPIO3 / GPIO10 |
-| Spare (unassigned) | GPIO2 (strapping pin, deliberately avoided), GPIO4-7 (JTAG-default) |
+| CAN node address (NODE_ID0-3) | GPIO0 / GPIO1 / GPIO2 / GPIO3 |
+| Spare (unused) | GPIO4-7 (JTAG-default), GPIO10 |
 
-## Configurable CAN node address
+## Configurable CAN node address, as-fabbed
 
 4-bit node address (0-15), read directly by the ESP32-C3 — deliberately **not** through the PCA9555, since address-select logic belongs on the MCU's own non-isolated Domain A side, not across the ADuM1250 isolation barrier onto Domain B where the PCA9555 lives. Shared logic lives in `lib/orc_can_addr/` and is linked into every sketch below, each printing the current reading at startup.
 
-**Wiring assumed**: external 10kΩ pulldown to GND per bit, switch/jumper to 3V3 per bit — open=0 (LOW), closed=1 (HIGH). Plain `INPUT` mode in firmware (no internal pull requested); the external 10k dominates the ESP32-C3's own internal weak pull resistors (~45kΩ typ either direction per the datasheet) regardless of their state, so there's nothing to fight.
+**Wiring**: external 10kΩ pulldown to GND per bit, switch/jumper to 3V3 per bit — open=0 (LOW), closed=1 (HIGH). Plain `INPUT` mode in firmware (no internal pull requested); the external 10k dominates the ESP32-C3's own internal weak pull resistors (~45kΩ typ either direction per the datasheet) regardless of their state, so there's nothing to fight.
 
-**Pin pick (GPIO0, GPIO1, GPIO3, GPIO10) — why these four**: the ESP32-C3's full strapping-pin set is exactly {GPIO2, GPIO8, GPIO9} (Espressif *ESP32-C3 Series Datasheet* v2.4, Table 3-1/3-2/3-3 — same tables cited for the GPIO9 analysis above). GPIO8/9 are already claimed by I2C. That leaves GPIO2 as the one remaining unclaimed strapping pin — deliberately passed over for the address bank even though it's *probably* fine by the same external-resistor-sets-a-consistent-level argument used for GPIO9, because Espressif's own Hardware Design Guidelines separately flag GPIO2 as glitch-prone and recommend a pull-up specifically to avoid unintended Download-Boot entry — not worth taking on when four clean alternatives exist. GPIO0/1/3/10 are **not strapping pins at all**, so — unlike GPIO8/9 — there is no boot-time strap-read window to check against an external pulldown; this is a plain runtime GPIO-read problem, not a boot-strap problem. GPIO4-7 (JTAG-default: MTMS/MTDI/MTCK/MTDO) and GPIO18/19 (native USB, not even broken out on this board's header) were passed over in favor of pins with no secondary function at all. GPIO0/1/3 are also ADC1_CH0/CH1/CH3 — irrelevant here since they're used purely as digital inputs, not sampled by the ADC.
+**Pins actually built: GPIO0, GPIO1, GPIO2, GPIO3 — corrected after the fact, not the original plan.** The initial pick (documented earlier the same day, 2026-08-04) was GPIO0/1/3/10, specifically chosen to avoid GPIO2 since it's one of the ESP32-C3's three strapping pins. **That was never what got built.** The as-fabbed schematic (`hardware/mcu.kicad_sch`, U7) wires `NODE_ID0`..`NODE_ID3` to a contiguous `IO0`..`IO3` block — which includes GPIO2 and doesn't use GPIO10 at all. This firmware has been corrected to match the real board; the schematic is the source of truth here, not the firmware plan.
 
-**Schematic not yet updated to match** — as of `docs/subcircuit-capture-guide.md`'s 2026-08-02 MCU-sheet rebuild, `IO0`/`IO1`/`IO3`/`IO10` are still explicitly no-connect-flagged on the schematic as "genuinely spare." This firmware-side pin reservation is ahead of the hardware — the no-connects need removing and the switch/pulldown network needs adding to the schematic before this is real on the board, not just in code.
+**GPIO2 strapping safety — re-verified with real rigor since it's now load-bearing on a board that's already at fab, not just a design preference to weigh.** The ESP32-C3's full strapping-pin set is exactly {GPIO2, GPIO8, GPIO9} (Espressif *ESP32-C3 Series Datasheet* v2.4, Table 3-1/3-2/3-3). Table 3-3 "Chip Boot Mode Control" has exactly two rows:
+
+| Boot Mode | GPIO2 | GPIO8 | GPIO9 |
+|---|---|---|---|
+| SPI Boot (normal) | Any value | Any value | 1 |
+| Joint Download Boot | 1 | 1 | 0 |
+
+— with the table's own footnote stating plainly: *"GPIO2 actually does not determine SPI Boot and Joint Download Boot mode, but it is recommended to pull this pin up due to glitches."* This board's I2C pull-up (R21, `SCL_A`, 10kΩ — see `docs/subcircuit-capture-guide.md`'s I2C Isolator section) holds **GPIO9 = 1 at every reset**, which is the sole determinant of the SPI-Boot row. Both address-switch positions on GPIO2 (LOW via the external 10k pulldown when open, HIGH when closed) land in that same SPI-Boot row regardless — GPIO2's column is "Any value" whenever GPIO9=1, and GPIO9=1 is guaranteed here. No published ESP32-C3 errata mention GPIO2 (checked directly against Espressif's chip errata index, not assumed absent by analogy to GPIO8/9). **Verdict: safe as fabbed, no rework needed.** Espressif's own generic recommendation to add a pull-up on GPIO2 (to guard against glitches on a *floating* GPIO2 in designs where GPIO9 isn't independently pinned) doesn't apply here in the same way, since this design's own pull-down plus GPIO9's independent pull-up together determine the outcome regardless of GPIO2's transient state.
+
+GPIO0/1/3 are also ADC1_CH0/CH1/CH3 — irrelevant here since they're used purely as digital inputs, not sampled by the ADC. GPIO10, spare in this design, was the original plan's bit3 pin but isn't actually wired to anything address-related on the real board.
 
 ## The GPIO9 strapping question — resolved
 

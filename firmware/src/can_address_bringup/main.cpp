@@ -1,15 +1,17 @@
 // ORC firmware bring-up: configurable CAN node address
 //
 // NOT application firmware. Reads the 4-bit address-select bank (external
-// 10k pulldown per bit, switch/jumper to 3V3, on GPIO0/1/3/10) and reports
-// the resulting 0-15 node address continuously, so a bench check can walk
-// all 16 switch combinations and confirm each one reads back correctly
-// before trusting the scheme in the field.
+// 10k pulldown per bit, switch/jumper to 3V3, on GPIO0/1/2/3 -- matching the
+// as-fabbed schematic's NODE_ID0..NODE_ID3 nets) and reports the resulting
+// 0-15 node address continuously, so a bench check can walk all 16 switch
+// combinations and confirm each one reads back correctly before trusting
+// the scheme in the field.
 //
 // See firmware/lib/orc_can_addr/orc_can_addr.h for the pin pick and the
-// strapping-pin-safety reasoning (short version: none of GPIO0/1/3/10 are
-// ESP32-C3 strapping pins, so there's no boot-time interaction to check,
-// unlike the GPIO8/9 I2C case).
+// GPIO2 strapping-pin-safety reasoning (short version: GPIO2 is a strapping
+// pin, but Table 3-3 shows it's don't-care whenever GPIO9=1, which this
+// board's I2C pull-up guarantees at every reset -- verified specifically
+// because the board was already at fab when this was checked).
 //
 // Nothing here has been run against real hardware with the address-select
 // switches actually wired -- compiles cleanly, ready to flash.
