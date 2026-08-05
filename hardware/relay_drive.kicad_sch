@@ -1752,6 +1752,20 @@
 			(embedded_fonts no)
 		)
 	)
+	(text "10x High Side Coil Drive"
+		(exclude_from_sim no)
+		(at 146.812 21.844 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+				(thickness 0.508)
+				(bold yes)
+				(color 0 0 132 1)
+			)
+			(justify bottom)
+		)
+		(uuid "6ac38f67-8630-4d82-b4ef-a0796e43c0b0")
+	)
 	(text "Output To Relay Board"
 		(exclude_from_sim no)
 		(at 228.092 88.138 0)

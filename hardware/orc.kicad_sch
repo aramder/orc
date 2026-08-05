@@ -3,7 +3,7 @@
 	(generator "eeschema")
 	(generator_version "10.0")
 	(uuid "dfe8a5cf-95d8-40b2-99f0-435f7d912c24")
-	(paper "USLetter")
+	(paper "A4")
 	(lib_symbols
 		(symbol "AramLib:NP_MNT_1.152mm"
 			(pin_names
@@ -107,7 +107,7 @@
 	)
 	(symbol
 		(lib_id "AramLib:NP_MNT_1.152mm")
-		(at 69.85 154.94 0)
+		(at 82.55 154.94 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -118,7 +118,7 @@
 		(fields_autoplaced yes)
 		(uuid "34e22300-387b-47f1-8f2f-86c6a2de2e82")
 		(property "Reference" "MNT4"
-			(at 72.39 153.6699 0)
+			(at 85.09 153.6699 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -129,7 +129,7 @@
 			)
 		)
 		(property "Value" "2.5mm NP"
-			(at 72.39 156.2099 0)
+			(at 85.09 156.2099 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -140,7 +140,7 @@
 			)
 		)
 		(property "Footprint" "MountingHole:MountingHole_2.5mm"
-			(at 69.85 154.94 0)
+			(at 82.55 154.94 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -151,7 +151,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 69.85 154.94 0)
+			(at 82.55 154.94 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -162,7 +162,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 69.85 154.94 0)
+			(at 82.55 154.94 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -183,7 +183,7 @@
 	)
 	(symbol
 		(lib_id "AramLib:NP_MNT_1.152mm")
-		(at 69.85 149.86 0)
+		(at 82.55 149.86 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -194,7 +194,7 @@
 		(fields_autoplaced yes)
 		(uuid "681557a4-64bf-4c5d-8741-d142a587c3a1")
 		(property "Reference" "MNT3"
-			(at 72.39 148.5899 0)
+			(at 85.09 148.5899 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -205,7 +205,7 @@
 			)
 		)
 		(property "Value" "4mm NP"
-			(at 72.39 151.1299 0)
+			(at 85.09 151.1299 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -216,7 +216,7 @@
 			)
 		)
 		(property "Footprint" "MountingHole:MountingHole_4mm"
-			(at 69.85 149.86 0)
+			(at 82.55 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -227,7 +227,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 69.85 149.86 0)
+			(at 82.55 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -238,7 +238,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 69.85 149.86 0)
+			(at 82.55 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -259,7 +259,7 @@
 	)
 	(symbol
 		(lib_id "AramLib:NP_MNT_1.152mm")
-		(at 53.34 149.86 0)
+		(at 66.04 149.86 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -270,7 +270,7 @@
 		(fields_autoplaced yes)
 		(uuid "69791a54-2ffe-455d-8ea0-b1e80c8c8a0a")
 		(property "Reference" "MNT1"
-			(at 55.88 148.5899 0)
+			(at 68.58 148.5899 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -281,7 +281,7 @@
 			)
 		)
 		(property "Value" "4mm NP"
-			(at 55.88 151.1299 0)
+			(at 68.58 151.1299 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -292,7 +292,7 @@
 			)
 		)
 		(property "Footprint" "MountingHole:MountingHole_4mm"
-			(at 53.34 149.86 0)
+			(at 66.04 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -303,7 +303,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 53.34 149.86 0)
+			(at 66.04 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -314,7 +314,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 53.34 149.86 0)
+			(at 66.04 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -335,7 +335,7 @@
 	)
 	(symbol
 		(lib_id "AramLib:NP_MNT_1.152mm")
-		(at 53.34 154.94 0)
+		(at 66.04 154.94 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -346,7 +346,7 @@
 		(fields_autoplaced yes)
 		(uuid "caf585a2-a537-422e-b317-9e89e9434736")
 		(property "Reference" "MNT2"
-			(at 55.88 153.6699 0)
+			(at 68.58 153.6699 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -357,7 +357,7 @@
 			)
 		)
 		(property "Value" "2.5mm NP"
-			(at 55.88 156.2099 0)
+			(at 68.58 156.2099 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -368,7 +368,7 @@
 			)
 		)
 		(property "Footprint" "MountingHole:MountingHole_2.5mm"
-			(at 53.34 154.94 0)
+			(at 66.04 154.94 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -379,7 +379,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 53.34 154.94 0)
+			(at 66.04 154.94 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -390,7 +390,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 53.34 154.94 0)
+			(at 66.04 154.94 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -410,7 +410,7 @@
 		)
 	)
 	(sheet
-		(at 76.2 101.6)
+		(at 88.9 101.6)
 		(size 25.4 12.7)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -426,7 +426,7 @@
 		)
 		(uuid "089bbdbc-b2e4-4793-8813-12c4f13d1267")
 		(property "Sheetname" "Power Side A"
-			(at 76.2 100.8884 0)
+			(at 88.9 100.8884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -437,7 +437,7 @@
 			)
 		)
 		(property "Sheetfile" "power_side_a.kicad_sch"
-			(at 76.2 114.8846 0)
+			(at 88.9 114.8846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -456,7 +456,7 @@
 		)
 	)
 	(sheet
-		(at 228.6 76.2)
+		(at 241.3 76.2)
 		(size 25.4 12.7)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -472,7 +472,7 @@
 		)
 		(uuid "12479d80-f751-406d-999d-23e59507feae")
 		(property "Sheetname" "Relay Drive"
-			(at 228.6 75.4884 0)
+			(at 241.3 75.4884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -483,7 +483,7 @@
 			)
 		)
 		(property "Sheetfile" "relay_drive.kicad_sch"
-			(at 228.6 89.4846 0)
+			(at 241.3 89.4846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -502,7 +502,7 @@
 		)
 	)
 	(sheet
-		(at 127 76.2)
+		(at 139.7 76.2)
 		(size 25.4 12.7)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -518,7 +518,7 @@
 		)
 		(uuid "558031e1-5005-4f71-9738-42e76d65930f")
 		(property "Sheetname" "I2C Isolator"
-			(at 127 75.4884 0)
+			(at 139.7 75.4884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -529,7 +529,7 @@
 			)
 		)
 		(property "Sheetfile" "i2c_isolator.kicad_sch"
-			(at 127 89.4846 0)
+			(at 139.7 89.4846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -548,7 +548,7 @@
 		)
 	)
 	(sheet
-		(at 177.8 101.6)
+		(at 190.5 101.6)
 		(size 25.4 12.7)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -564,7 +564,7 @@
 		)
 		(uuid "aba1bba0-b74d-454b-8f0e-c183dec674ff")
 		(property "Sheetname" "Power Side B"
-			(at 177.8 100.8884 0)
+			(at 190.5 100.8884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -575,7 +575,7 @@
 			)
 		)
 		(property "Sheetfile" "power_side_b.kicad_sch"
-			(at 177.8 114.8846 0)
+			(at 190.5 114.8846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -594,7 +594,7 @@
 		)
 	)
 	(sheet
-		(at 177.8 76.2)
+		(at 190.5 76.2)
 		(size 25.4 12.7)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -610,7 +610,7 @@
 		)
 		(uuid "dc956131-34e4-47b5-b1b6-dd73d8b73b30")
 		(property "Sheetname" "I2C Expander"
-			(at 177.8 75.4884 0)
+			(at 190.5 75.4884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -621,7 +621,7 @@
 			)
 		)
 		(property "Sheetfile" "i2c_expander.kicad_sch"
-			(at 177.8 89.4846 0)
+			(at 190.5 89.4846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -640,7 +640,7 @@
 		)
 	)
 	(sheet
-		(at 76.2 76.2)
+		(at 88.9 76.2)
 		(size 25.4 12.7)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -656,7 +656,7 @@
 		)
 		(uuid "e58ed683-0af2-459e-a614-11ad8be943ea")
 		(property "Sheetname" "MCU"
-			(at 76.2 75.4884 0)
+			(at 88.9 75.4884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -667,7 +667,7 @@
 			)
 		)
 		(property "Sheetfile" "mcu.kicad_sch"
-			(at 76.2 89.4846 0)
+			(at 88.9 89.4846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -686,7 +686,7 @@
 		)
 	)
 	(sheet
-		(at 25.4 76.2)
+		(at 38.1 76.2)
 		(size 25.4 12.7)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -702,7 +702,7 @@
 		)
 		(uuid "f79db394-df17-432c-a726-9b16ad13a4e6")
 		(property "Sheetname" "Communications"
-			(at 25.4 75.4884 0)
+			(at 38.1 75.4884 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -713,7 +713,7 @@
 			)
 		)
 		(property "Sheetfile" "communications.kicad_sch"
-			(at 25.4 89.4846 0)
+			(at 38.1 89.4846 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects

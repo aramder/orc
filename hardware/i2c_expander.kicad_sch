@@ -945,6 +945,20 @@
 			(embedded_fonts no)
 		)
 	)
+	(text "I2C IO Expander"
+		(exclude_from_sim no)
+		(at 152.146 50.038 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+				(thickness 0.508)
+				(bold yes)
+				(color 0 0 132 1)
+			)
+			(justify bottom)
+		)
+		(uuid "c730a7a5-34d4-442c-901d-62fc6d89d642")
+	)
 	(junction
 		(at 127 63.5)
 		(diameter 0)
