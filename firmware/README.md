@@ -2,7 +2,7 @@
 
 **These are bring-up and verification sketches, not ORC's application firmware.** They exist to answer one narrow question — does the MCU pinout the hardware side has settled on actually work at the IO level? — before real application logic (relay control, CAN message handling) gets written. See [`.claude/firmware-io-verification-prompt.md`](../.claude/firmware-io-verification-prompt.md) for the task this directory was created to satisfy.
 
-**No ORC board exists yet.** No ORC board has been fabricated and no specific "ESP32-C3 Super Mini" listing has been bought (see [`docs/subcircuit-capture-guide.md`](../docs/subcircuit-capture-guide.md)'s OPEN ARCHITECTURE DECISION section) — nothing here has run against ORC's actual hardware, and no PCA9555 or SN65HVD230 has been tested. All three sketches build successfully (verified: `pio run -e i2c_scanner`, `pio run -e pca9555_bringup -e uart_can_bringup`, all SUCCESS against the `esp32-c3-devkitm-1` stand-in board), and two of the three have now also run live on a bare, generic ESP32-C3 dev kit connected to this session's machine (nothing else attached to it) — see "Real-hardware run, 2026-08-01" below for exactly what that does and doesn't confirm. Treat any claim in this directory carefully: "runs on a generic ESP32-C3 dev kit" is not the same thing as "verified on ORC's board," since the PCA9555 and SN65HVD230 pieces of the design are still completely untested.
+**No ORC board exists yet.** No ORC board has been fabricated and no specific "ESP32-C3 Super Mini" listing has been bought (see [`docs/subcircuit-capture-guide.md`](../docs/subcircuit-capture-guide.md)'s OPEN ARCHITECTURE DECISION section) — nothing here has run against ORC's actual hardware, and no PCA9555 or SN65HVD230 has been tested. All four sketches build successfully (verified: `pio run -e i2c_scanner -e pca9555_bringup -e uart_can_bringup -e can_address_bringup`, all SUCCESS against the `esp32-c3-devkitm-1` stand-in board), and two of them have also run live on a bare, generic ESP32-C3 dev kit connected to this session's machine (nothing else attached to it) — see "Real-hardware run, 2026-08-01" below for exactly what that does and doesn't confirm. `can_address_bringup` and the address-print addition to the other three sketches (added 2026-08-04) are build-verified only, not yet re-flashed to real hardware — the dev kit used for the earlier run was no longer enumerated on this machine when this pass ran. Treat any claim in this directory carefully: "runs on a generic ESP32-C3 dev kit" is not the same thing as "verified on ORC's board," since the PCA9555 and SN65HVD230 pieces of the design are still completely untested.
 
 ## Board stand-in
 
@@ -10,12 +10,24 @@
 
 ## Pin assignment under test
 
-Per `docs/subcircuit-capture-guide.md`'s MCU section (2026-08-01):
+Per `docs/subcircuit-capture-guide.md`'s MCU section (updated 2026-08-04) — full 13-GPIO "Super Mini" header pinout (GPIO0-10, GPIO20, GPIO21):
 
 | Function | Pins |
 |---|---|
 | I2C (SDA/SCL) | GPIO8 / GPIO9 |
 | UART (TX/RX, to SN65HVD230) | GPIO21 / GPIO20 |
+| CAN node address (bit0-bit3) | GPIO0 / GPIO1 / GPIO3 / GPIO10 |
+| Spare (unassigned) | GPIO2 (strapping pin, deliberately avoided), GPIO4-7 (JTAG-default) |
+
+## Configurable CAN node address
+
+4-bit node address (0-15), read directly by the ESP32-C3 — deliberately **not** through the PCA9555, since address-select logic belongs on the MCU's own non-isolated Domain A side, not across the ADuM1250 isolation barrier onto Domain B where the PCA9555 lives. Shared logic lives in `lib/orc_can_addr/` and is linked into every sketch below, each printing the current reading at startup.
+
+**Wiring assumed**: external 10kΩ pulldown to GND per bit, switch/jumper to 3V3 per bit — open=0 (LOW), closed=1 (HIGH). Plain `INPUT` mode in firmware (no internal pull requested); the external 10k dominates the ESP32-C3's own internal weak pull resistors (~45kΩ typ either direction per the datasheet) regardless of their state, so there's nothing to fight.
+
+**Pin pick (GPIO0, GPIO1, GPIO3, GPIO10) — why these four**: the ESP32-C3's full strapping-pin set is exactly {GPIO2, GPIO8, GPIO9} (Espressif *ESP32-C3 Series Datasheet* v2.4, Table 3-1/3-2/3-3 — same tables cited for the GPIO9 analysis above). GPIO8/9 are already claimed by I2C. That leaves GPIO2 as the one remaining unclaimed strapping pin — deliberately passed over for the address bank even though it's *probably* fine by the same external-resistor-sets-a-consistent-level argument used for GPIO9, because Espressif's own Hardware Design Guidelines separately flag GPIO2 as glitch-prone and recommend a pull-up specifically to avoid unintended Download-Boot entry — not worth taking on when four clean alternatives exist. GPIO0/1/3/10 are **not strapping pins at all**, so — unlike GPIO8/9 — there is no boot-time strap-read window to check against an external pulldown; this is a plain runtime GPIO-read problem, not a boot-strap problem. GPIO4-7 (JTAG-default: MTMS/MTDI/MTCK/MTDO) and GPIO18/19 (native USB, not even broken out on this board's header) were passed over in favor of pins with no secondary function at all. GPIO0/1/3 are also ADC1_CH0/CH1/CH3 — irrelevant here since they're used purely as digital inputs, not sampled by the ADC.
+
+**Schematic not yet updated to match** — as of `docs/subcircuit-capture-guide.md`'s 2026-08-02 MCU-sheet rebuild, `IO0`/`IO1`/`IO3`/`IO10` are still explicitly no-connect-flagged on the schematic as "genuinely spare." This firmware-side pin reservation is ahead of the hardware — the no-connects need removing and the switch/pulldown network needs adding to the schematic before this is real on the board, not just in code.
 
 ## The GPIO9 strapping question — resolved
 
@@ -51,6 +63,7 @@ Each sketch is its own PlatformIO environment (separate, individually-flashable 
 pio run -e i2c_scanner -t upload -t monitor
 pio run -e pca9555_bringup -t upload -t monitor
 pio run -e uart_can_bringup -t upload -t monitor
+pio run -e can_address_bringup -t upload -t monitor
 ```
 
 (Run from this `firmware/` directory. `-t monitor` opens the serial console at 115200 baud after flashing; omit it to just build+flash.)
@@ -66,6 +79,10 @@ Configures the PCA9555 as 10 outputs (IO0_0–IO0_7 + IO1_0/IO1_1, matching `doc
 ### `uart_can_bringup` ([src/uart_can_bringup/main.cpp](src/uart_can_bringup/main.cpp))
 
 Configures UART1 at 500 kbps on GPIO21(TX)/GPIO20(RX) — the pins wired to the SN65HVD230 — sends a counted test pattern (`ORC-BRINGUP-<counter>`) once per second, and reports whatever arrives on RX within a 500 ms window. Useful for a bench loopback test (jumper TX to RX, or through the transceiver with CAN_H/CAN_L looped/terminated) before a real bus exists, and for testing against a second node once one does. This is raw UART bytes through the transceiver, not CAN-protocol-framed traffic.
+
+### `can_address_bringup` ([src/can_address_bringup/main.cpp](src/can_address_bringup/main.cpp))
+
+Reads the 4-bit CAN-address bank (GPIO0/1/3/10, see "Configurable CAN node address" above) and prints the resulting 0-15 value once per second, along with each individual bit. Intended for a bench check: walk all 16 switch combinations and confirm each one reads back correctly before trusting the scheme in the field. The other three sketches also call the same `orcPrintCanAddress()` helper (from `lib/orc_can_addr/`) once at startup, so whichever sketch is running, the console banner always states which node address the board is currently set to — useful as soon as more than one ORC unit might be on a bench or bus at once.
 
 ## What this is not
 

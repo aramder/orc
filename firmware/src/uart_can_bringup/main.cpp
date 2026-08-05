@@ -27,6 +27,7 @@
 // hardware exists.
 
 #include <Arduino.h>
+#include "orc_can_addr.h"
 
 static const uint8_t kTxPin = ORC_UART_TX_PIN;
 static const uint8_t kRxPin = ORC_UART_RX_PIN;
@@ -52,6 +53,9 @@ void setup() {
   Serial.printf("UART1 TX=GPIO%u  RX=GPIO%u  baud=%lu\n", kTxPin, kRxPin, kBaud);
   Serial.println("This is a raw UART byte stream through the SN65HVD230, not "
                   "framed CAN protocol traffic.");
+
+  orcInitCanAddrPins();
+  orcPrintCanAddress();
 
   CanUart.begin(kBaud, SERIAL_8N1, kRxPin, kTxPin);
 }

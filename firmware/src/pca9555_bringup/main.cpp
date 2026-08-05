@@ -24,6 +24,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include "orc_can_addr.h"
 
 static const uint8_t kSdaPin = ORC_I2C_SDA_PIN;
 static const uint8_t kSclPin = ORC_I2C_SCL_PIN;
@@ -83,6 +84,9 @@ void setup() {
   Serial.println("=== ORC bring-up: PCA9555 walking-pattern test ===");
   Serial.println("Bring-up/verification sketch -- not application firmware.");
   Serial.printf("SDA=GPIO%u  SCL=GPIO%u  PCA9555 addr=0x%02X\n", kSdaPin, kSclPin, kAddr);
+
+  orcInitCanAddrPins();
+  orcPrintCanAddress();
 
   Wire.begin(kSdaPin, kSclPin);
   Wire.setClock(100000);
