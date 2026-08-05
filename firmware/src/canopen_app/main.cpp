@@ -27,6 +27,7 @@
 #include <Wire.h>
 #include <Preferences.h>
 #include "driver/twai.h"
+#include "esp_timer.h"
 #include "orc_can_addr.h"
 #include "orc_canopen.h"
 #include "orc_relay_map.h"
@@ -79,6 +80,12 @@ static unsigned long g_lastRpdo1Millis = 0;
 static unsigned long g_lastTpdo2Millis = 0;
 static unsigned long g_lastHeartbeatMillis = 0;
 static uint16_t g_tpdo2IntervalMs = kTpdo2DefaultIntervalMs;
+static bool g_busOffRecoveryInitiated = false;
+static unsigned long g_lastHealthCheckMillis = 0;
+// Fixed cadence, deliberately independent of g_tpdo2IntervalMs -- that value
+// is SDO-configurable by the host and could be set far higher than is
+// reasonable for noticing/recovering from a bus fault promptly.
+static const uint32_t kHealthCheckIntervalMs = 1000;
 
 static Preferences g_prefs;
 static const char *kPrefsNamespace = "orc_cfg";
@@ -159,7 +166,14 @@ static void sendTpdo2() {
     Serial.println("WARNING: twai_get_status_info() failed; skipping this TPDO2 send.");
     return;
   }
-  uint32_t uptimeSeconds = millis() / 1000;  // known limitation: millis() rolls over ~49 days; accepted for this scope, see README
+  // esp_timer_get_time() is a 64-bit microseconds-since-boot monotonic
+  // counter -- deliberately NOT millis() (32-bit milliseconds, wraps at
+  // ~49.7 days), which would silently reset this field to near-zero every
+  // ~49.7 days on a continuously-powered unit and defeat the whole reason
+  // this field is a uint32_t seconds count (~136 years of headroom) instead
+  // of a 2-byte one. Found and fixed 2026-08-05 review -- see
+  // docs/can-protocol-research.md's TPDO2 section.
+  uint32_t uptimeSeconds = (uint32_t)(esp_timer_get_time() / 1000000);
   uint8_t payload[8];
   orcPackTpdo2(status.state, status.tx_error_counter, status.rx_error_counter, uptimeSeconds, payload);
   twaiSend(orcCobId(kOrcCobIdTpdo2Base, g_nodeId), payload, 8);
@@ -209,6 +223,39 @@ static void handleIncomingFrame(const twai_message_t &msg) {
   // Anything else on the bus is not addressed to this node's known message
   // set -- ignored, not an error (a shared bus legitimately carries traffic
   // for other nodes).
+}
+
+// TWAI bus-off recovery -- found missing in 2026-08-05 review, per ESP-IDF's
+// own docs the driver does NOT recover from bus-off on its own:
+// twai_initiate_recovery() must be called explicitly, and even after
+// recovery completes (128 bus-idle occurrences observed) the driver lands in
+// STOPPED, not RUNNING -- twai_start() must be called again to resume.
+// Without this, a single bus fault (short, glitch, anything that trips
+// bus-off) would be correctly reported via TPDO2's health byte forever, but
+// never actually recovered from -- exactly the "detects the fault but can't
+// self-heal" trap this project's sibling repo (rigos-core) explicitly
+// designed its own io_relay daemon to avoid (BUG-016).
+static void checkTwaiRecovery() {
+  twai_status_info_t status;
+  if (twai_get_status_info(&status) != ESP_OK) return;
+
+  if (status.state == TWAI_STATE_BUS_OFF) {
+    if (!g_busOffRecoveryInitiated) {
+      Serial.println("TWAI bus-off detected -- initiating recovery.");
+      twai_initiate_recovery();
+      g_busOffRecoveryInitiated = true;
+    }
+  } else if (status.state == TWAI_STATE_STOPPED && g_busOffRecoveryInitiated) {
+    // Only treat STOPPED as "recovery complete" if we're the ones who
+    // initiated it -- the driver also passes through STOPPED at normal
+    // startup, before twai_start() is first called in setup().
+    Serial.println("TWAI bus recovery complete -- restarting driver.");
+    if (twai_start() == ESP_OK) {
+      g_busOffRecoveryInitiated = false;
+    } else {
+      Serial.println("WARNING: twai_start() failed after recovery; will retry next check.");
+    }
+  }
 }
 
 static void checkRpdo1Timeout() {
@@ -312,6 +359,7 @@ void setup() {
                             // timeout firing before any RPDO1 ever arrives is harmless
   g_lastTpdo2Millis = now;
   g_lastHeartbeatMillis = now;
+  g_lastHealthCheckMillis = now;
 
   Serial.println("Initialization complete. Entering Operational.");
 }
@@ -327,6 +375,10 @@ void loop() {
   checkRpdo1Timeout();
 
   unsigned long now = millis();
+  if (now - g_lastHealthCheckMillis >= kHealthCheckIntervalMs) {
+    checkTwaiRecovery();
+    g_lastHealthCheckMillis = now;
+  }
   if (now - g_lastTpdo2Millis >= g_tpdo2IntervalMs) {
     sendTpdo2();
     g_lastTpdo2Millis = now;

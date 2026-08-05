@@ -285,6 +285,19 @@ releases still target the legacy API this firmware uses, but if the Arduino
 core ever moves to a newer bundled IDF version that's switched over, this
 mapping (and the packing code) would need revisiting.
 
+**Implementation bug found and fixed, 2026-08-05 review, worth recording
+against the "~136 years of headroom" claim above**: the first implementation
+of the uptime field computed it as `millis() / 1000` — but `millis()` itself
+is a 32-bit *milliseconds* counter that overflows at ~49.7 days, so on a
+continuously-powered unit (the realistic deployment case) the reported
+uptime would have silently reset to near-zero every ~49.7 days, regardless
+of the wire field's own 136-year capacity. The 136-year headroom claim above
+is only actually true because this was caught and fixed — `canopen_app` now
+derives it from `esp_timer_get_time()` (ESP-IDF's 64-bit
+microseconds-since-boot monotonic counter), which has no comparable
+wraparound concern. Don't reintroduce `millis()` for this field if this code
+is ever touched again.
+
 **Transmission interval — configurable via standard CANopen object, not a
 custom field.** CiA 301 already defines a Communication Parameter Record for
 every TPDO; TPDO2's is object `1801h`:
@@ -345,12 +358,27 @@ were ever real — implemented defensively rather than left as an open risk.
 ### Heartbeat — bus-liveness / fail-safe trigger
 
 COB-ID `0x700 + NodeID`, DLC 1 byte (NMT state), periodic (e.g. 1 Hz, tunable).
-**Firmware safety recommendation, not yet implemented anywhere**: ORC's firmware
-should treat loss of the expected command cadence (RPDO1 timeout, using CANopen's
-own heartbeat/node-guarding concept) as a reason to de-energize all channels
-rather than hold last state — this is a design decision for the firmware pass
-that implements this protocol, flagged here because it falls directly out of
-adopting CANopen's own liveness vocabulary, not out of scope for this doc to name.
+**Firmware safety recommendation — implemented 2026-08-05 in `canopen_app`**:
+ORC's firmware treats loss of the expected command cadence (RPDO1 timeout,
+using CANopen's own heartbeat/node-guarding concept) as a reason to
+de-energize all channels rather than hold last state. `canopen_app`'s actual
+timeout value (5000&nbsp;ms) is a firmware default, not derived from any
+documented host command cadence — RPDO1 is event-driven, not periodic, so
+there's no spec'd interval to time against. See
+`firmware/src/canopen_app/main.cpp`'s `checkRpdo1Timeout()`.
+
+**Related robustness item, found missing in the 2026-08-05 implementation
+review and fixed same day**: detecting a dead bus (via this heartbeat/RPDO1
+mechanism, or via TPDO2's health byte) is only half the job — ESP-IDF's TWAI
+driver does not recover from a bus-off condition on its own.
+`twai_initiate_recovery()` must be called explicitly, and even after recovery
+completes the driver lands in `STOPPED`, not `RUNNING` — `twai_start()` must
+be called again to actually resume. Without this, a single bus fault would be
+correctly *reported* forever (TPDO2's health byte would show `BUS_OFF`/
+`RECOVERING`) but never actually recovered from, requiring a physical
+power-cycle. `canopen_app`'s `checkTwaiRecovery()` now handles both steps on
+a fixed 1&nbsp;second cadence, independent of TPDO2's own (SDO-configurable)
+interval.
 
 ### Why single-frame is enough, no ISO-TP
 
