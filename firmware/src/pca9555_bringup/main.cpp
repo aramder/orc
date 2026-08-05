@@ -7,16 +7,20 @@
 // scope or a per-channel LED jig can visually confirm addressing and pin
 // mapping once real hardware exists.
 //
-// Channel-to-register mapping, per the ERC findings logged in
-// .claude/kicad-mcp-logbook.md (2026-08-01, "ERC 46->4" entry): PCA9555's
-// unused pins are ~INT and IO1_2..IO1_7 (6 pins) -- meaning the 10 used
-// pins are IO0_0..IO0_7 (Port 0, all 8 bits) plus IO1_0 and IO1_1 (Port 1,
-// low 2 bits). This sketch assumes channel 1..10 maps to that pin order;
-// it has not been cross-checked against a specific schematic net-to-pin
-// table for the coil-driver stages (RBn/QNn/RPn/QPn), since that level of
-// detail isn't in the docs this sketch was written against. Re-verify the
-// mapping against the schematic before trusting channel numbers to mean
-// specific relay channels.
+// Channel-to-register mapping -- CORRECTED 2026-08-05 against the real
+// schematic. An earlier version of this sketch assumed channels 1-8 were
+// sequential on Port0 (whole byte) and channels 9-10 on Port1's low 2 bits,
+// per a 2026-08-01 ERC-findings note that only established WHICH 10 pins
+// were used, not which channel maps to which pin. That assumption was
+// WRONG: docs/subcircuit-capture-guide.md's "Channel mapping" table (read
+// directly off hardware/i2c_expander.kicad_sch, 2026-08-04) shows the real
+// mapping is routing-driven, not sequential -- e.g. channel 1 is Port1 bit0,
+// channel 2 is Port0 bit7, channel 10 is Port0 bit3, and so on, spanning
+// both ports non-contiguously. The real mapping now lives in
+// firmware/lib/orc_relay_map/ -- this sketch uses it directly rather than
+// hand-rolling a second (and previously wrong) copy. If you're using this
+// sketch's walking pattern with a scope or an LED jig, "channel 3" printed
+// here now means the actual schematic's channel 3, not a guess.
 //
 // Nothing here has been run against real hardware. Compiles cleanly against
 // the esp32-c3-devkitm-1 stand-in board definition; ready to flash once a
@@ -25,6 +29,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include "orc_can_addr.h"
+#include "orc_relay_map.h"
 
 static const uint8_t kSdaPin = ORC_I2C_SDA_PIN;
 static const uint8_t kSclPin = ORC_I2C_SCL_PIN;
@@ -40,10 +45,10 @@ static const uint8_t kRegPolarityPort1 = 0x05;
 static const uint8_t kRegConfigPort0 = 0x06;
 static const uint8_t kRegConfigPort1 = 0x07;
 
-// Config register: bit = 0 -> output, bit = 1 -> input (NXP default = 0xFF,
-// all inputs, on power-up).
-static const uint8_t kConfigPort0Outputs = 0x00;  // all 8 bits: outputs (channels 1-8)
-static const uint8_t kConfigPort1Mask = 0xFC;     // bits 0,1: outputs (channels 9-10); bits 2-7: left as inputs (unused, per docs)
+// Config values: kOrcPca9555ConfigPort0/Port1, from lib/orc_relay_map/ --
+// see that lib for the real bit-by-bit reasoning (3 non-contiguous spare
+// bits per port, not "channels 9-10 only used on Port1" like this sketch
+// used to assume).
 
 static const uint8_t kNumChannels = 10;
 
@@ -60,18 +65,13 @@ static bool writeReg(uint8_t reg, uint8_t value) {
   return true;
 }
 
-// Drive channel `ch` (1-10) HIGH, all other 9 channels LOW.
+// Drive channel `ch` (1-10) HIGH, all other 9 channels LOW. Uses the real
+// routing-driven map from lib/orc_relay_map/, not a sequential assumption.
 static void setChannel(uint8_t ch) {
+  uint16_t channelMask = (uint16_t)(1u << (ch - 1));
   uint8_t port0 = 0x00;
   uint8_t port1 = 0x00;
-
-  if (ch >= 1 && ch <= 8) {
-    port0 = (uint8_t)(1u << (ch - 1));       // channels 1-8 -> IO0_0..IO0_7
-  } else if (ch == 9) {
-    port1 = 0x01;                             // channel 9 -> IO1_0
-  } else if (ch == 10) {
-    port1 = 0x02;                             // channel 10 -> IO1_1
-  }
+  orcRelayMaskToPca9555(channelMask, port0, port1);
 
   writeReg(kRegOutputPort0, port0);
   writeReg(kRegOutputPort1, port1);
@@ -112,11 +112,10 @@ void setup() {
   writeReg(kRegPolarityPort0, 0x00);
   writeReg(kRegPolarityPort1, 0x00);
 
-  // Direction: channels 1-10 as outputs; unused IO1_2..IO1_7 left as inputs
-  // (config bit = 1), matching the "10 of 16 used" note in
-  // docs/subcircuit-capture-guide.md rather than driving unconnected pins.
-  writeReg(kRegConfigPort0, kConfigPort0Outputs);
-  writeReg(kRegConfigPort1, kConfigPort1Mask);
+  // Direction: channels 1-10 as outputs; the 6 unused/spare bits (3 per
+  // port, non-contiguous -- see lib/orc_relay_map/) left as inputs.
+  writeReg(kRegConfigPort0, kOrcPca9555ConfigPort0);
+  writeReg(kRegConfigPort1, kOrcPca9555ConfigPort1);
 
   Serial.println("Configured. Starting walking-single-HIGH pattern across channels 1-10.");
 }
