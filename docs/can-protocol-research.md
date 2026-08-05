@@ -149,6 +149,26 @@ dictionaries (`CANopenNode/example` in the repo) or a purchased CiA 401 copy if 
 project's budget allows — this doc is enough to design against, not a substitute
 for that final check at implementation time.
 
+### Bus bitrate — open item, not yet decided, 2026-08-04
+
+Surfaced from the other side of this integration: `rigos-core` (the Pi host
+software that will command ORC) chose its physical CAN adapter for ORC's bus
+— a Jhoinrch RH-02 USB-CAN adapter (CANable-clone, STM32G431CBT6), rated up to
+1 Mbps — while drafting its own relay-control FR
+([rigos-core FR-059](https://github.com/aramder/rigos-core) — cross-repo
+reference, not duplicated here), and in doing so noticed **ORC has never
+actually locked a bus bitrate anywhere in this repo.** The SN65HVD230
+transceiver supports up to 1 Mbps (circuit-draft.md's BOM entry), and CiA
+301's own default is 1 Mbps, but "the transceiver can do it" and "CiA
+defaults to it" aren't the same as ORC actually deciding and documenting a
+number — real deployments commonly run CANopen at 125k/250k/500k as well,
+traded against bus length and noise margin, neither of which has been
+analyzed for ORC's actual harness. **Needs a real decision, not an assumed
+default** — every node on the bus (ORC units, any switch panel from the
+precedent survey above, the Pi adapter) must agree on one bitrate, so this
+has to land before `rigos-core`'s CAN backend can hardcode a value. Open
+item, not resolved by this note.
+
 ### Arbitration ID (COB-ID) allocation
 
 Per CiA 301's predefined connection set (11-bit standard CAN ID = 4-bit function
