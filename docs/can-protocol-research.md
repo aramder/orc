@@ -149,25 +149,37 @@ dictionaries (`CANopenNode/example` in the repo) or a purchased CiA 401 copy if 
 project's budget allows — this doc is enough to design against, not a substitute
 for that final check at implementation time.
 
-### Bus bitrate — open item, not yet decided, 2026-08-04
+### Bus bitrate — resolved 2026-08-05: 125 kbit/s
 
 Surfaced from the other side of this integration: `rigos-core` (the Pi host
 software that will command ORC) chose its physical CAN adapter for ORC's bus
 — a Jhoinrch RH-02 USB-CAN adapter (CANable-clone, STM32G431CBT6), rated up to
 1 Mbps — while drafting its own relay-control FR
 ([rigos-core FR-059](https://github.com/aramder/rigos-core) — cross-repo
-reference, not duplicated here), and in doing so noticed **ORC has never
-actually locked a bus bitrate anywhere in this repo.** The SN65HVD230
-transceiver supports up to 1 Mbps (circuit-draft.md's BOM entry), and CiA
-301's own default is 1 Mbps, but "the transceiver can do it" and "CiA
-defaults to it" aren't the same as ORC actually deciding and documenting a
-number — real deployments commonly run CANopen at 125k/250k/500k as well,
-traded against bus length and noise margin, neither of which has been
-analyzed for ORC's actual harness. **Needs a real decision, not an assumed
-default** — every node on the bus (ORC units, any switch panel from the
-precedent survey above, the Pi adapter) must agree on one bitrate, so this
-has to land before `rigos-core`'s CAN backend can hardcode a value. Open
-item, not resolved by this note.
+reference, not duplicated here), and in doing so noticed **ORC had never
+actually locked a bus bitrate anywhere in this repo.**
+
+**Decision: 125 kbit/s**, user's call — this is a dedicated accessory-control
+bus (10 relay channels, small periodic/event-driven message set, no telemetry
+firehose), so headroom for a much higher bitrate buys nothing real here, and
+a slower bitrate gives more margin against harness length, reflections, and
+noise on a hand-run automotive/RV cable — the tradeoff the earlier open item
+flagged as unanalyzed. All nodes on the bus (ORC units, `rigos-core`'s
+adapter, any switch panel from the precedent survey above) must run this
+same 125 kbit/s.
+
+**Naming precision worth keeping straight, since it caused genuine confusion
+when this was first discussed**: 125 kbit/s is *not* the same thing as
+"ISO 11898-3 low-speed/fault-tolerant CAN," even though 125 kbit/s happens to
+be that standard's rate ceiling. ISO 11898-3 is a *different physical layer*
+(fault-tolerant, survives a single-wire short/open, used for body/comfort
+buses like this truck's own 125 kbit/s MS-CAN). **ORC's SN65HVD230 is an
+ISO 11898-2 (high-speed) transceiver** — this is a high-speed-CAN transceiver
+simply run at a low bitrate, not a fault-tolerant low-speed-CAN physical
+layer. Functionally fine for this application (no fault-tolerance
+requirement identified for ORC's dedicated bus), but don't describe ORC's bus
+as "ISO 11898-3" or "low-speed CAN" in any spec sheet — it isn't, even though
+the number matches.
 
 ### Arbitration ID (COB-ID) allocation
 
@@ -180,6 +192,7 @@ code, shifted left 7 bits, OR'd with a 7-bit node ID):
 | Emergency (EMCY) | `0001` | `0x080 + NodeID` | ORC unit → host, fault/error report |
 | RPDO1 — relay command | `0100` | `0x200 + NodeID` | host → ORC unit |
 | TPDO1 — relay status | `0011` | `0x180 + NodeID` | ORC unit → host |
+| TPDO2 — bus health / uptime | — | `0x280 + NodeID` | ORC unit → host, periodic, added 2026-08-05 (see below) |
 | Heartbeat (NMT error control) | `1110` | `0x700 + NodeID` | ORC unit → host, periodic liveness |
 
 `NodeID` is a per-unit integer, 1–127, assigned at commissioning. For a
@@ -215,10 +228,119 @@ objects (`6200h` sub-index 1 = byte 0, sub-index 2 = byte 1):
 
 COB-ID `0x180 + NodeID`, DLC 2 bytes, same bit layout as RPDO1, mapped from CiA
 401's "Read Input 8 Bit" (`6000h`) — reports the state ORC actually applied
-(useful even without current sensing, as command-vs-applied confirmation; if
-per-channel current sensing is added later per `design-inputs.md`'s open item,
-extend this to a second TPDO carrying per-channel fault/overcurrent bits rather
-than overloading TPDO1).
+(useful even without current sensing, as command-vs-applied confirmation). Per
+this doc's original note, a second TPDO was the planned home for anything
+beyond relay state — that's now TPDO2, below, though it carries bus-health
+telemetry rather than per-channel fault bits since ORC still has no current
+sensing (`design-inputs.md`'s open item, unresolved) — if that ever changes,
+extend TPDO2 or add a TPDO3 rather than overloading TPDO1's simple 2-byte
+relay-state layout.
+
+### TPDO2 — bus health / uptime, added 2026-08-05
+
+**Why this exists**: while discussing the heartbeat message, it became clear
+"send some richer status periodically" is a real, separate need from
+heartbeat's pure liveness byte — but mixing extra data into the heartbeat
+frame itself would break CANopen conformance (CiA 301 defines heartbeat as
+exactly 1 byte, DLC=1; a generic CANopen master or the switch panels surveyed
+earlier expect that and nothing more). The **CANopen-native** answer is
+already built into the spec: every node gets 4 predefined transmit-PDO slots,
+and ORC has only used the first (TPDO1). TPDO2 is the second, purpose-built
+for exactly this.
+
+**COB-ID `0x280 + NodeID`, DLC 8, periodic** (interval configurable, see
+below; default 1000&nbsp;ms / 1&nbsp;Hz, matching heartbeat's own stated
+default). Content is deliberately limited to what ORC can actually measure
+today — no invented fields:
+
+| Byte | Meaning |
+|---|---|
+| 0 | CAN controller state — see enum below |
+| 1 | TWAI TX error counter (0–255, raw hardware counter value) |
+| 2 | TWAI RX error counter (0–255, raw hardware counter value) |
+| 3–6 | Uptime, seconds since boot, `uint32` little-endian (CANopen's standard multi-byte convention) — ~136 years of headroom, chosen over a 2-byte field specifically so it never wraps during any realistic continuous-power deployment |
+| 7 | Reserved, send 0 |
+
+**Byte 0 state enum — confirmed 2026-08-05 against ESP-IDF's real
+`driver/twai.h` (legacy API, what Arduino-ESP32 currently wraps), implemented
+in `firmware/lib/orc_canopen/orc_canopen.h`.** `twai_state_t` has exactly
+4 members — `TWAI_STATE_STOPPED`, `TWAI_STATE_RUNNING`, `TWAI_STATE_BUS_OFF`,
+`TWAI_STATE_RECOVERING` (confirmed identical across ESP-IDF v4.4.x, v5.2.1,
+and current `master`, cross-checked against 3 IDF revisions) — with **no
+separate error-warning or error-passive state of its own**; the driver only
+exposes those 4 coarse states, so the original design sketch's approach of
+layering the standard ISO 11898-1/SJA1000-lineage error-confinement
+thresholds (warning ≥96, passive ≥128 on either TX or RX error counter) on
+top of `RUNNING` is not just reasonable, it's the *only* way to get that
+granularity from this driver — confirmed correct, not just plausible. Final
+mapping, unchanged from the original proposal: `0`=stopped, `1`=running/
+error-active, `2`=error-warning, `3`=error-passive, `4`=bus-off/recovering.
+
+**One version caveat worth carrying forward**: ESP-IDF's `master` branch has
+since deprecated this legacy API in favor of a new node-based `esp_twai.h`
+API with a *different* struct/enum (`twai_node_status_t`/`twai_error_state_t`)
+that *does* expose explicit `TWAI_ERROR_ACTIVE`/`WARNING`/`PASSIVE`/`BUS_OFF`
+states natively with `uint16_t` counters — Arduino-ESP32's current stable
+releases still target the legacy API this firmware uses, but if the Arduino
+core ever moves to a newer bundled IDF version that's switched over, this
+mapping (and the packing code) would need revisiting.
+
+**Transmission interval — configurable via standard CANopen object, not a
+custom field.** CiA 301 already defines a Communication Parameter Record for
+every TPDO; TPDO2's is object `1801h`:
+
+| Sub-index | Field | ORC value |
+|---|---|---|
+| 1 | COB-ID | `0x280 + NodeID` (fixed) |
+| 2 | Transmission type | `254` (timer-driven, asynchronous) |
+| 3 | Inhibit time | `0` (no minimum gap enforced) |
+| **5** | **Event timer** | **milliseconds between sends — the actual "frequency" knob, default `1000`** |
+
+Set it with a plain SDO write: index `1801h`, sub-index `5`, value = desired
+interval in **milliseconds**, not Hz — convert at the host
+(`interval_ms = 1000 / Hz`). No custom protocol needed; any generic CANopen
+configuration tool already knows how to write a TPDO's event timer.
+
+**Persistence**: the request was for this to survive a power cycle.
+CANopen's fully-conformant mechanism is object `1010h` ("Store parameters") —
+writing a specific ASCII signature to a sub-index tells the device to save
+its current Object Dictionary state to non-volatile memory, with `1011h`
+("Restore default parameters") as the inverse. **Recommended for ORC's first
+implementation: skip `1010h`/`1011h` for now and just auto-persist the
+`1801h` sub-index 5 value to the ESP32-C3's NVS (flash-backed key-value
+store) immediately on SDO write** — satisfies "persists across power cycles"
+without the extra object-dictionary machinery. Flagged as a scope choice, not
+a limitation: full `1010h`/`1011h` support is a reasonable later addition if
+ORC ever needs to interoperate with a generic CANopen configuration tool that
+expects the standard store/restore mechanism specifically, rather than just
+persisting on every write.
+
+**TX/RX error-counter width — confirmed 2026-08-05, with one honest residual caveat.**
+`twai_status_info_t`'s `tx_error_counter`/`rx_error_counter` fields are
+declared `uint32_t` in the struct itself (confirmed against the real ESP-IDF
+header, same 3-revision cross-check as above) — but the underlying hardware
+(an SJA1000-lineage TWAI peripheral per ISO 11898-1) implements TEC/REC as
+8-bit registers, 0–255, entering bus-off (which flips `state` to
+`TWAI_STATE_BUS_OFF` rather than letting the counter climb past 256) once
+TEC would exceed that range. **No explicit ESP-IDF documentation states this
+0–255 range as a guaranteed invariant of the `uint32_t` struct field itself**
+— it's implied by the hardware register width and the bus-off transition
+logic, not asserted outright. `firmware/lib/orc_canopen/orc_canopen.h`
+masks both counters `& 0xFF` when packing into TPDO2's single-byte fields
+regardless, so this is safe in practice even if the theoretical edge case
+were ever real — implemented defensively rather than left as an open risk.
+
+**Open items:**
+- [x] Byte-0 controller-state enum — confirmed against ESP-IDF's real
+  `twai_state_t`, see above. Implemented in `firmware/lib/orc_canopen/`.
+- [x] TWAI TX/RX error-counter width — confirmed effectively 0–255 in
+  practice (hardware register width), defensively masked in code regardless
+  of the theoretical struct-field caveat above. See above.
+- [x] NVS key name/namespace — `orc_cfg` / `tpdo2_ms`, implemented in
+  `firmware/src/canopen_app/main.cpp` via the Arduino `Preferences` library.
+- [ ] `1010h`/`1011h` full store/restore support — still deferred, not
+  designed. `canopen_app` auto-persists on every SDO write instead, per the
+  scope choice above.
 
 ### Heartbeat — bus-liveness / fail-safe trigger
 
@@ -232,11 +354,12 @@ adopting CANopen's own liveness vocabulary, not out of scope for this doc to nam
 
 ### Why single-frame is enough, no ISO-TP
 
-Total payload per direction is 2 bytes (10 channels) plus optional expansion —
+RPDO1/TPDO1's payload is 2 bytes (10 channels) plus optional expansion —
 comfortably inside a classic CAN 2.0 frame's 8-byte DLC ceiling with 6 bytes of
 headroom for anything not yet scoped (e.g. a firmware/config version byte, a
-future 6-more-channel expansion). No transport-layer segmentation is needed now
-or under any currently-known future requirement.
+future 6-more-channel expansion). TPDO2 (added 2026-08-05) uses the full 8
+bytes but is still a single classic CAN frame, DLC 8 — still no transport-layer
+segmentation needed. No currently-known future requirement needs ISO-TP.
 
 ## Precedent survey — automotive/accessory-control ecosystems, 2026-08-02
 

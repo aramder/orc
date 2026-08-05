@@ -237,6 +237,38 @@ Whoever captures these next should give them their own sheet(s), following the s
 | U5 (legacy ref) | PCA9555PW,118 (NXP) | I2C GPIO expander, addr 0x20, 10-of-16 I/O used, 6 spare | C128392 | ⚠️ re-pulled live 2026-08-01, 8,773 in stock, TSSOP-24. Basic/Extended tier not confirmed (badge didn't render to automated fetch). **Temp margin thin**: datasheet rated −40 to +85°C against this enclosure's 65–85°C ambient — near-zero headroom for self-heating above bulk ambient, same class of concern as the PTC 85°C-derating finding. Address 0x20 is set by A0–A2 board strapping, not part-number-specific. |
 | C16 (legacy ref) | 0.1µF | Decoupling | — | ⚠️ generic |
 
+**Channel mapping — read directly off `hardware/i2c_expander.kicad_sch` (U1), 2026-08-04.** This is the canonical source for firmware channel numbering; do not re-derive it from `firmware/src/pca9555_bringup/main.cpp`'s current assumption (channels 1-8 sequential on Port 0, 9-10 on Port 1 low bits) — that assumption predates this schematic check and is wrong on both port-bit alignment and channel order.
+
+| Pin # | Signal | Register bit | Net | Coil channel |
+|---|---|---|---|---|
+| 4 | IO0_0 | P0.0 | — | unused (spare) |
+| 5 | IO0_1 | P0.1 | — | unused (spare) |
+| 6 | IO0_2 | P0.2 | — | unused (spare) |
+| 7 | IO0_3 | P0.3 | COIL10_EN | Channel 10 |
+| 8 | IO0_4 | P0.4 | COIL8_EN | Channel 8 |
+| 9 | IO0_5 | P0.5 | COIL6_EN | Channel 6 |
+| 10 | IO0_6 | P0.6 | COIL4_EN | Channel 4 |
+| 11 | IO0_7 | P0.7 | COIL2_EN | Channel 2 |
+| 13 | IO1_0 | P1.0 | COIL1_EN | Channel 1 |
+| 14 | IO1_1 | P1.1 | COIL3_EN | Channel 3 |
+| 15 | IO1_2 | P1.2 | COIL5_EN | Channel 5 |
+| 16 | IO1_3 | P1.3 | COIL7_EN | Channel 7 |
+| 17 | IO1_4 | P1.4 | COIL9_EN | Channel 9 |
+| 18 | IO1_5 | P1.5 | — | unused (spare) |
+| 19 | IO1_6 | P1.6 | — | unused (spare) |
+| 20 | IO1_7 | P1.7 | — | unused (spare) |
+
+Spares are the low 3 bits of Port 0 and the high 3 bits of Port 1 — not a contiguous block, and channel order (10,8,6,4,2 then 1,3,5,7,9) is not sequential either; routing-driven, not a numbering scheme. Implied register values:
+
+| Register | Value | Reasoning |
+|---|---|---|
+| Config P0 (cmd 0x06) | `0x07` | bits 0-2 input (unused), bits 3-7 output |
+| Config P1 (cmd 0x07) | `0xE0` | bits 0-4 output, bits 5-7 input (unused) |
+| Output P0 bit for coil N (N even, 2-10) | bit `(10-N)` | e.g. coil 10 → P0.3, coil 2 → P0.7 |
+| Output P1 bit for coil N (N odd, 1-9) | bit `(N-1)/2` | e.g. coil 1 → P1.0, coil 9 → P1.4 |
+
+**Resolved 2026-08-05**: the real mapping above is now implemented in `firmware/lib/orc_relay_map/orc_relay_map.h` (a new shared lib, single source of truth for this table in firmware) — `pca9555_bringup`'s `setChannel()` corrected to use it, and the new `canopen_app` application firmware (RPDO1/TPDO1 handling) uses it too, catching what would otherwise have been a real bug in ORC's first application firmware before it ever ran. `kConfigPort0Outputs`/`kConfigPort1Mask` replaced by `kOrcPca9555ConfigPort0`/`kOrcPca9555ConfigPort1` (`0x07`/`0xE0`, matching this table exactly) in the same lib. All affected firmware environments rebuilt and re-verified.
+
 ### Per-channel coil driver ×10 (channels 1–10)
 
 Identical stage repeated for each relay channel: `RBn` (PCA9555 output → NPN base) → `QNn` (level-shift NPN) → `RPn` (gate pull-up) → `QPn` (high-side coil switch) → harness pin `n+2`.
