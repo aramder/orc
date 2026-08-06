@@ -1,6 +1,6 @@
 # ORC firmware
 
-**Two kinds of content live here now, added in two separate passes — don't conflate them.** The four `*_bringup`/`can_address_bringup` sketches exist to answer one narrow question — does the MCU pinout the hardware side has settled on actually work at the IO level? — before real application logic got written; see [`.claude/firmware-io-verification-prompt.md`](../.claude/firmware-io-verification-prompt.md) for that task. **`canopen_app` (added 2026-08-05) is different: it IS ORC's first real application firmware** — actual CANopen relay control, per [`docs/can-protocol-research.md`](../docs/can-protocol-research.md) and [`.claude/can-application-firmware-prompt.md`](../.claude/can-application-firmware-prompt.md) — built on top of the bring-up work, not replacing it. See its own section below.
+**Three kinds of content live here now, added in three separate passes — don't conflate them.** The four `*_bringup`/`can_address_bringup` sketches exist to answer one narrow question — does the MCU pinout the hardware side has settled on actually work at the IO level? — before real application logic got written; see [`.claude/firmware-io-verification-prompt.md`](../.claude/firmware-io-verification-prompt.md) for that task. **`canopen_app` (added 2026-08-05) is different: it IS ORC's first real application firmware** — actual CANopen relay control, per [`docs/can-protocol-research.md`](../docs/can-protocol-research.md) and [`.claude/can-application-firmware-prompt.md`](../.claude/can-application-firmware-prompt.md) — built on top of the bring-up work, not replacing it. **`usb_bench` (added 2026-08-05) is a second piece of application firmware, but a bench/dev tool, not the production control path** — a USB-serial relay-control interface over the same native USB-C port already wired for flashing, per [`docs/usb-bench-interface-spec.md`](../docs/usb-bench-interface-spec.md) and [`docs/features/FR-001.md`](../docs/features/FR-001.md). See each one's own section below.
 
 **No ORC board is in hand yet.** As of 2026-08-04 the board has been **sent out to fab** (per `hardware/mcu.kicad_sch`'s U7 — a real, built ESP32-C3-SuperMini symbol/footprint, not just a placeholder) but hasn't come back — nothing here has run against ORC's actual hardware, and no PCA9555 or SN65HVD230 has been tested. All four sketches build successfully (verified: `pio run -e i2c_scanner -e pca9555_bringup -e uart_can_bringup -e can_address_bringup`, all SUCCESS against the `esp32-c3-devkitm-1` stand-in board), and two of them have also run live on a bare, generic ESP32-C3 dev kit connected to this session's machine (nothing else attached to it) — see "Real-hardware run, 2026-08-01" below for exactly what that does and doesn't confirm. `can_address_bringup` and the address-print addition to the other three sketches are build-verified only, not yet re-flashed to real hardware — the dev kit used for the earlier run was no longer enumerated on this machine when this pass ran. **Firmware's pin assignment was corrected once already, same day, after the board had already gone to fab** — see "CAN node address, as-fabbed" below; the schematic is now the source of truth firmware must match, not the other way around. Treat any claim in this directory carefully: "runs on a generic ESP32-C3 dev kit" is not the same thing as "verified on ORC's board," since the PCA9555 and SN65HVD230 pieces of the design are still completely untested.
 
@@ -74,6 +74,7 @@ pio run -e pca9555_bringup -t upload -t monitor
 pio run -e uart_can_bringup -t upload -t monitor
 pio run -e can_address_bringup -t upload -t monitor
 pio run -e canopen_app -t upload -t monitor
+pio run -e usb_bench -t upload -t monitor
 ```
 
 (Run from this `firmware/` directory. `-t monitor` opens the serial console at 115200 baud after flashing; omit it to just build+flash.)
@@ -124,8 +125,39 @@ pio run -e canopen_app -t upload -t monitor
 
 **Shared libraries**: `lib/orc_canopen/orc_canopen.h` — pure wire-protocol encode/decode helpers (COB-ID arithmetic, RPDO1/TPDO1 2-byte-payload ↔ 10-bit-channel-mask, TPDO2 payload packing, the one-object SDO wire format). `lib/orc_relay_map/orc_relay_map.h` — the real, schematic-confirmed channel-mask ↔ PCA9555-register-value mapping, shared with `pca9555_bringup` (see its section above). Splitting these two translation steps (protocol bytes ↔ channel mask, channel mask ↔ PCA9555 registers) into separate libs is deliberate — it's what let the routing-driven mapping bug get caught and fixed in one place without touching the wire-protocol format at all. Neither lib makes TWAI/I2C/NVS calls of its own; `canopen_app/main.cpp` owns the actual peripherals and runtime loop. Both header-only, no `.cpp` — everything's a small `inline` function.
 
+## `usb_bench` — application firmware: USB bench/debug interface
+
+**A second piece of real relay-control firmware, but explicitly a bench/dev tool, not the production control path.** ORC's resolved control-path decision (`docs/design-inputs.md`) is CAN, exclusively — this doesn't change that. It reuses the ESP32-C3's native USB-C port, already wired for programming/flashing, as a plain-ASCII CDC-ACM serial interface, per [`docs/usb-bench-interface-spec.md`](../docs/usb-bench-interface-spec.md) (full protocol spec/rationale) and [`docs/features/FR-001.md`](../docs/features/FR-001.md) (this repo's feature-request bookkeeping, format borrowed from the sibling `rigos-core` repo's `docs/features/` convention). Motivating case: `rigos-core`'s `io_relay` daemon needs CAN transceiver hardware wired correctly before ORC's own firmware can be exercised at all — this gives a transceiver-free path to drive/observe relay logic over the same cable used to flash it, during bring-up or as an ongoing bench tool.
+
+```
+pio run -e usb_bench -t upload -t monitor
+```
+
+**Transport**: native USB CDC-ACM (`Serial`), same `ARDUINO_USB_MODE`/`ARDUINO_USB_CDC_ON_BOOT` build flags every other sketch here already sets — no new build flags needed. Point-to-point by construction (one USB cable = one ORC unit) — unlike CAN, no NodeID concept here.
+
+**Framing**: plain ASCII, one command/response per line, `\n`-terminated (`\r` tolerated/stripped), 128-byte max line length (`ERR LINE_TOO_LONG` + discard-until-`\n` past that), case-insensitive command words.
+
+**Commands** (exactly per the spec):
+
+| Command | Response | Notes |
+|---|---|---|
+| `PING` | `PONG <fw_version>` | Liveness + identify. |
+| `VERSION` | `VERSION <fw_version> <build_date>` | Fuller build info. |
+| `SET <ch> ON\|OFF` | `OK SET <ch> ON\|OFF` or `ERR <code>` | `<ch>` is 1-10. |
+| `GET <ch>` | `STATE <ch> ON\|OFF` or `ERR <code>` | Applied state, read back from the PCA9555's Input Port registers — same "confirmed, not optimistic echo" pattern `canopen_app`'s TPDO1 already uses — not a repeat of the last commanded value. |
+| `STATUS` | `STATUS <10-char 0/1 string>` | Channel 1 first, e.g. `STATUS 0010000000` = channel 3 on. |
+
+**Unsolicited lines**: `HB <uptime_ms>` every 1000ms; `STATE <ch> ON\|OFF` once, immediately, on every actual applied-state change (SET-driven or fail-safe-driven) — closes the same "fresh listener can't learn current state" gap the spec flags CAN's event-only TPDO1 as having, which USB has no bandwidth reason to repeat.
+
+**Fail-safe — FR-001's own decision, the spec explicitly left this open**: idle-timeout de-energizes all channels after **30000ms** of no host activity (any received line, valid or malformed, resets the timer), for philosophical consistency with CAN's own RPDO1-timeout fail-safe (`can-protocol-research.md`, implemented in `canopen_app`) — but 6x longer than CAN's 5000ms, since this is an interactive human-typed interface where a person pausing to read output shouldn't trip the same threshold a vanished CAN host should.
+
+**Relay I/O**: goes through `lib/orc_relay_map/` — the same real, schematic-confirmed channel-mask↔PCA9555-register mapping `pca9555_bringup` and `canopen_app` already share. No third hand-rolled copy of that table.
+
+**Not implemented, by explicit scope choice**: a `rigos-core`-side `orc_usb.py` bus backend — the spec calls this a natural follow-up, not needed for this firmware to be useful on its own (a human with a serial terminal is a complete consumer). Multi-unit addressing — point-to-point only, no NodeID concept.
+
 ## What this is not
 
-- **The four bring-up sketches** (`i2c_scanner`, `pca9555_bringup`, `uart_can_bringup`, `can_address_bringup`) are not application firmware — no relay control logic, no real CAN message parsing/handling, no product behavior. `canopen_app` is different — see its section above — but even it isn't a claim of hardware verification (next point).
-- Not a claim of ORC-hardware verification — `i2c_scanner` and `uart_can_bringup` have run live on a generic ESP32-C3 dev kit (see above), which confirms the MCU-side IO logic on real silicon of the right chip family, but the PCA9555 and SN65HVD230 remain completely untested, and no ORC board exists to test them on. `pca9555_bringup` is still build-verified only, never run. `canopen_app` is build-verified only — no real TWAI frame, no real PCA9555, no real bus has touched it.
+- **The four bring-up sketches** (`i2c_scanner`, `pca9555_bringup`, `uart_can_bringup`, `can_address_bringup`) are not application firmware — no relay control logic, no real CAN message parsing/handling, no product behavior. `canopen_app` and `usb_bench` are different — see their sections above — but neither is a claim of hardware verification (next point).
+- Not a claim of ORC-hardware verification — `i2c_scanner` and `uart_can_bringup` have run live on a generic ESP32-C3 dev kit (see above), which confirms the MCU-side IO logic on real silicon of the right chip family, but the PCA9555 and SN65HVD230 remain completely untested, and no ORC board exists to test them on. `pca9555_bringup` is still build-verified only, never run. `canopen_app` and `usb_bench` are build-verified only — no real TWAI frame, no real USB host, no real PCA9555, no real bus has touched either.
 - Not a final board declaration — `esp32-c3-devkitm-1` in `platformio.ini` is an explicit stand-in; see above.
+- `usb_bench` is not the production control path — CAN stays the one real transport in the field. See `docs/usb-bench-interface-spec.md`'s Scope section for the full "why this doesn't contradict the CAN-exclusive decision" reasoning.
