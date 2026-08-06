@@ -66,6 +66,13 @@ static uint16_t g_lastAppliedMask = 0;  // last channel mask observed via PCA955
 static unsigned long g_lastActivityMillis = 0;
 static unsigned long g_lastHeartbeatMillis = 0;
 
+// True once a PCA9555 has ACKed and been configured. FR-001 REOPENED
+// 2026-08-05: this used to be implicit in "setup() halted if not" -- real
+// hardware showed that gate also silently killed PING/VERSION/framing,
+// none of which touch the PCA9555 at all. Now setup() never halts; this
+// flag is what SET/GET/STATUS check instead.
+static bool g_pca9555Present = false;
+
 // --- PCA9555 I2C helpers, same pattern as canopen_app/pca9555_bringup ----
 static bool pca9555WriteReg(uint8_t reg, uint8_t value) {
   Wire.beginTransmission(kPca9555Addr);
@@ -75,6 +82,11 @@ static bool pca9555WriteReg(uint8_t reg, uint8_t value) {
   if (result != 0) {
     Serial.printf("ERR I2C write failed (reg 0x%02X, val 0x%02X): endTransmission=%u\n", reg,
                   value, result);
+    // A write failure after the PCA9555 was previously seen means it's
+    // gone missing mid-session (unplugged, power loss on Domain B, etc.) --
+    // drop the flag so the next SET/GET/STATUS re-probes instead of
+    // repeating the same failing I2C transaction and error message.
+    g_pca9555Present = false;
     return false;
   }
   return true;
@@ -87,8 +99,14 @@ static bool pca9555WriteReg(uint8_t reg, uint8_t value) {
 static bool pca9555ReadInputPorts(uint8_t &port0, uint8_t &port1) {
   Wire.beginTransmission(kPca9555Addr);
   Wire.write(kRegInputPort0);
-  if (Wire.endTransmission(false) != 0) return false;
-  if (Wire.requestFrom((int)kPca9555Addr, 2) != 2) return false;
+  if (Wire.endTransmission(false) != 0) {
+    g_pca9555Present = false;  // gone missing mid-session -- see pca9555WriteReg's comment
+    return false;
+  }
+  if (Wire.requestFrom((int)kPca9555Addr, 2) != 2) {
+    g_pca9555Present = false;
+    return false;
+  }
   port0 = Wire.read();
   port1 = Wire.read();
   return true;
@@ -99,6 +117,48 @@ static bool readAppliedMask(uint16_t &maskOut) {
   if (!pca9555ReadInputPorts(port0, port1)) return false;
   maskOut = orcPca9555ToRelayMask(port0, port1);
   return true;
+}
+
+// Probes for the PCA9555 and, if it ACKs, runs the same output-configuration
+// sequence setup() used to run unconditionally. Called once at boot and
+// lazily (on demand) from SET/GET/STATUS whenever g_pca9555Present is false
+// -- see the "re-probe policy" note below for why lazy-on-demand was chosen
+// over a periodic background poll.
+static bool probeAndConfigurePca9555() {
+  Wire.beginTransmission(kPca9555Addr);
+  uint8_t probe = Wire.endTransmission();
+  if (probe != 0) {
+    g_pca9555Present = false;
+    return false;
+  }
+
+  // All channels off before switching direction (glitch-avoidance: device
+  // resets to all-input/0xFF, so this write only takes effect once
+  // direction flips to output below).
+  pca9555WriteReg(kRegOutputPort0, 0x00);
+  pca9555WriteReg(kRegOutputPort1, 0x00);
+  pca9555WriteReg(kRegPolarityPort0, 0x00);
+  pca9555WriteReg(kRegPolarityPort1, 0x00);
+  pca9555WriteReg(kRegConfigPort0, kOrcPca9555ConfigPort0);
+  pca9555WriteReg(kRegConfigPort1, kOrcPca9555ConfigPort1);
+
+  // The writes above go through pca9555WriteReg(), which clears
+  // g_pca9555Present on any failure -- if any of them failed, that's
+  // already reflected. Only claim success if it's still standing.
+  g_pca9555Present = true;
+  readAppliedMask(g_lastAppliedMask);  // baseline, avoids a spurious STATE burst on first command
+  return true;
+}
+
+// SET/GET/STATUS are the only commands that legitimately need the PCA9555.
+// Called first thing inside each of their handlers: if hardware was already
+// known-present, this is a no-op check; if not, it makes one lazy live
+// attempt before giving up -- see "re-probe policy" below.
+static bool requireRelayHardware() {
+  if (g_pca9555Present) return true;
+  if (probeAndConfigurePca9555()) return true;
+  Serial.println("ERR NO_RELAY_HARDWARE");
+  return false;
 }
 
 // Writes the given channel mask to the PCA9555 outputs, then reads back the
@@ -176,6 +236,7 @@ static void handleLine(char *line) {
       Serial.println("ERR BAD_CHANNEL");
       return;
     }
+    if (!requireRelayHardware()) return;
     toUpperInPlace(stateTok);
     bool on;
     if (strcmp(stateTok, "ON") == 0) {
@@ -206,6 +267,7 @@ static void handleLine(char *line) {
       Serial.println("ERR BAD_CHANNEL");
       return;
     }
+    if (!requireRelayHardware()) return;
     uint16_t mask;
     if (!readAppliedMask(mask)) {
       Serial.println("ERR I2C_READ_FAILED");
@@ -215,6 +277,7 @@ static void handleLine(char *line) {
     Serial.printf("STATE %d %s\n", ch, on ? "ON" : "OFF");
 
   } else if (strcmp(cmd, "STATUS") == 0) {
+    if (!requireRelayHardware()) return;
     char buf[11];
     formatStatus(buf);
     Serial.printf("STATUS %s\n", buf);
@@ -268,32 +331,32 @@ void setup() {
   Serial.println("=== ORC usb_bench: USB bench/debug interface ===");
   Serial.println("Bench/dev tool -- NOT the production control path. See "
                   "docs/usb-bench-interface-spec.md and docs/features/FR-001.md.");
-  Serial.printf("PONG %s\n", kFwVersion);
+  // Deliberately NOT printing a "PONG ..." line here -- FR-001's reopen
+  // flagged this exact line as misleading on the original real-hardware
+  // test: it read like a live response to a PING command, but was really
+  // just boot-log text printed before loop() (and therefore the actual
+  // command interface) ever started. Send an actual PING if you want a
+  // PONG.
 
   Wire.begin(kI2cSdaPin, kI2cSclPin);
   Wire.setClock(100000);
-  Wire.beginTransmission(kPca9555Addr);
-  uint8_t probe = Wire.endTransmission();
-  if (probe != 0) {
-    Serial.printf("ERR PCA9555 did not ACK at 0x%02X (endTransmission=%u). Halting -- relay "
-                  "control is this sketch's entire purpose. Run i2c_scanner first.\n",
-                  kPca9555Addr, probe);
-    while (true) delay(1000);
+
+  // FR-001 REOPENED 2026-08-05: this used to halt the whole sketch here if
+  // the PCA9555 didn't ACK -- which meant PING/VERSION/framing, none of
+  // which touch relay hardware, were unreachable on a bare bring-up devkit
+  // with no PCA9555 attached. That defeated this firmware's own stated
+  // purpose (usable *before* full ORC hardware exists). Now: probe once,
+  // note the result, and always continue into loop() either way.
+  if (probeAndConfigurePca9555()) {
+    Serial.println("PCA9555 configured: 10 channels as outputs, all off.");
+  } else {
+    Serial.printf("WARNING: PCA9555 did not ACK at 0x%02X -- no relay hardware present. "
+                  "PING/VERSION/HB and basic framing still work. SET/GET/STATUS will return "
+                  "ERR NO_RELAY_HARDWARE until a PCA9555 is detected (re-probed automatically "
+                  "on the next SET/GET/STATUS attempt -- no reboot needed if it's hot-plugged "
+                  "onto the bus later in this session). Run i2c_scanner to confirm the bus.\n",
+                  kPca9555Addr);
   }
-
-  // All channels off before switching direction (same glitch-avoidance
-  // reasoning as pca9555_bringup/canopen_app): device resets to
-  // all-input/0xFF, so this write only takes effect once direction flips
-  // to output below.
-  pca9555WriteReg(kRegOutputPort0, 0x00);
-  pca9555WriteReg(kRegOutputPort1, 0x00);
-  pca9555WriteReg(kRegPolarityPort0, 0x00);
-  pca9555WriteReg(kRegPolarityPort1, 0x00);
-  pca9555WriteReg(kRegConfigPort0, kOrcPca9555ConfigPort0);
-  pca9555WriteReg(kRegConfigPort1, kOrcPca9555ConfigPort1);
-  Serial.println("PCA9555 configured: 10 channels as outputs, all off.");
-
-  readAppliedMask(g_lastAppliedMask);  // establish baseline, avoid a spurious STATE burst on first command
 
   unsigned long now = millis();
   g_lastActivityMillis = now;
