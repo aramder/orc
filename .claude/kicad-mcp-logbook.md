@@ -619,3 +619,13 @@ Implemented `firmware/src/usb_bench/main.cpp` as a new, second piece of applicat
 Added `[env:usb_bench]` to `platformio.ini` (no new build flags needed -- reuses the existing I2C pins/PCA9555 address, no CAN/TWAI involvement at all). Built and verified: all six environments (`i2c_scanner`, `pca9555_bringup`, `uart_can_bringup`, `can_address_bringup`, `canopen_app`, `usb_bench`) SUCCESS. Same bar as everything else in this directory -- build-verified only, no ORC board in hand yet, nothing here has touched a real USB host or real PCA9555.
 
 **Files**: `docs/features/README.md`, `docs/features/LOG.md`, `docs/features/FR-001.md` (all new), `docs/usb-bench-interface-spec.md` (status header + Fail-safe section updated), `firmware/src/usb_bench/main.cpp` (new), `firmware/platformio.ini` (`[env:usb_bench]` added), `firmware/README.md` (intro + sketches list + new `usb_bench` section + "What this is not" updated). This logbook entry.
+
+## 2026-08-05 -- Flyback diode open item resolved: relay board has no internal diodes, ORC supplies them
+
+User directly inspected the physical relay board (not a datasheet/harness-pinout inference -- an actual bench check, the exact kind of confirmation the open item in circuit-draft.md had been waiting on since it was first flagged) and confirmed it has **no internal flyback diodes**. ORC's control board must supply one per coil.
+
+Started down a different path first -- a live-catalog sourcing pass for the *separate* open item, the coil-drive-side reverse-polarity P-FET (circuit-draft.md #5b, AO3401A undersized in SOT-23 for the ~0.45A sustained coil-drive load, needs a DPAK/SO-8-class replacement) -- dispatched a general-purpose agent to pull real LCSC candidates with 85C-derated current figures. User interrupted and killed the sub-passes: that FET search is squashed/irrelevant for now, not resolved. **No P-FET part was selected or recorded** -- #5b in circuit-draft.md remains open, untouched.
+
+Resolved the flyback item instead, per the user's actual answer: updated circuit-draft.md's "Diode part count" summary row and the open-items checklist entry from conditional ("if ORC needs to supply them") to confirmed-needed, and added BOM row 3d (10x SS34, LCSC C8678 -- the same part already qualified for the buck catch-diode role, reused rather than sourcing a new part number, consistent with this doc's existing diode-consolidation reasoning). Schematic placement of the 10 flyback diodes across the coil-drive P-FET outputs is flagged as a real remaining follow-up, not done in this pass -- this only resolves the BOM/decision level, not the drawing.
+
+**Files**: `docs/circuit-draft.md` (Diode part count row, open-items checklist, new BOM row 3d). This logbook entry. No `hardware/*.kicad_sch` touched.
