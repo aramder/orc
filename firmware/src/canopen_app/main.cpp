@@ -76,6 +76,10 @@ static uint8_t g_nodeId = 0;
 static uint8_t g_relayPort0 = 0;  // last-applied PCA9555 Output Port 0 (channels 1-8)
 static uint8_t g_relayPort1 = 0;  // last-applied PCA9555 Output Port 1 bits 0-1 (channels 9-10)
 static bool g_deenergizedByTimeout = false;
+// BUG-001 fix: whether the PCA9555 ACKed at boot. false means relay I/O
+// (RPDO1 commands, TPDO1 status) is unavailable, but the CAN node itself
+// (heartbeat, TPDO2, SDO) still comes up -- see setup() and handleRpdo1().
+static bool g_pca9555Present = false;
 static unsigned long g_lastRpdo1Millis = 0;
 static unsigned long g_lastTpdo2Millis = 0;
 static unsigned long g_lastHeartbeatMillis = 0;
@@ -187,6 +191,17 @@ static void sendHeartbeat(uint8_t nmtState) {
 static void handleRpdo1(const twai_message_t &msg) {
   if (msg.data_length_code < 2) {
     Serial.println("WARNING: RPDO1 received with DLC < 2, ignoring malformed frame.");
+    return;
+  }
+  // BUG-001: don't attempt PCA9555 I2C writes every RPDO1 if it was never
+  // present at boot -- they would fail identically every time. Still counts
+  // as received (resets the fail-safe timer below) since the host did send
+  // a valid command; the node just can't act on it without relay hardware.
+  if (!g_pca9555Present) {
+    Serial.println("RPDO1 received but no PCA9555 present -- relay command cannot be applied. "
+                    "Node stays on the bus (heartbeat/TPDO2 unaffected); TPDO1 not sent.");
+    g_lastRpdo1Millis = millis();
+    g_deenergizedByTimeout = false;
     return;
   }
   uint16_t channelMask = orcUnpackChannelMask(msg.data);
@@ -303,24 +318,35 @@ void setup() {
   Wire.setClock(100000);
   Wire.beginTransmission(kPca9555Addr);
   uint8_t probe = Wire.endTransmission();
-  if (probe != 0) {
-    Serial.printf("PCA9555 did not ACK at 0x%02X (endTransmission=%u). Halting -- relay "
-                  "control is this firmware's entire purpose, cannot proceed without it. "
-                  "Run i2c_scanner first to confirm the bus and address.\n",
+  g_pca9555Present = (probe == 0);
+  if (!g_pca9555Present) {
+    // BUG-001 fix (reopened 2026-08-05): this used to be `while (true)
+    // delay(1000)` here -- halting BEFORE the TWAI driver ever started,
+    // which took the whole CAN node dark (no heartbeat, no TPDO2 health
+    // report) on a PCA9555 fault, indistinguishable on the bus from
+    // "unit not powered" or "no CAN link at all". Continuing instead: the
+    // node still joins the bus and reports real liveness/health; only
+    // relay I/O (handleRpdo1/sendTpdo1) is unavailable until a PCA9555
+    // shows up. Same finding/fix shape as FR-001's usb_bench reopen -- see
+    // that shard for the sibling case.
+    Serial.printf("WARNING: PCA9555 did not ACK at 0x%02X (endTransmission=%u). Continuing "
+                  "without relay hardware -- CAN bus (heartbeat/TPDO2/SDO) still comes up; RPDO1 "
+                  "commands will be acknowledged but not applied until a PCA9555 is present. Run "
+                  "i2c_scanner to confirm wiring.\n",
                   kPca9555Addr, probe);
-    while (true) delay(1000);
+  } else {
+    // All channels off before switching direction (matches pca9555_bringup's
+    // own glitch-avoidance reasoning): device resets to all-input/0xFF, so
+    // this write only takes effect once direction flips to output below.
+    pca9555WriteReg(kRegOutputPort0, 0x00);
+    pca9555WriteReg(kRegOutputPort1, 0x00);
+    pca9555WriteReg(kRegPolarityPort0, 0x00);
+    pca9555WriteReg(kRegPolarityPort1, 0x00);
+    pca9555WriteReg(kRegConfigPort0, kOrcPca9555ConfigPort0);
+    pca9555WriteReg(kRegConfigPort1, kOrcPca9555ConfigPort1);
+    Serial.println("PCA9555 configured: 10 channels as outputs (real routing-driven map, see "
+                    "lib/orc_relay_map/), all off.");
   }
-  // All channels off before switching direction (matches pca9555_bringup's
-  // own glitch-avoidance reasoning): device resets to all-input/0xFF, so
-  // this write only takes effect once direction flips to output below.
-  pca9555WriteReg(kRegOutputPort0, 0x00);
-  pca9555WriteReg(kRegOutputPort1, 0x00);
-  pca9555WriteReg(kRegPolarityPort0, 0x00);
-  pca9555WriteReg(kRegPolarityPort1, 0x00);
-  pca9555WriteReg(kRegConfigPort0, kOrcPca9555ConfigPort0);
-  pca9555WriteReg(kRegConfigPort1, kOrcPca9555ConfigPort1);
-  Serial.println("PCA9555 configured: 10 channels as outputs (real routing-driven map, see "
-                  "lib/orc_relay_map/), all off.");
 
   twai_general_config_t gConfig = TWAI_GENERAL_CONFIG_DEFAULT(kTwaiTxPin, kTwaiRxPin, TWAI_MODE_NORMAL);
   // 125 kbit/s, LOCKED -- docs/can-protocol-research.md's "Bus bitrate"
