@@ -47,7 +47,19 @@ Bench inspection 2026-07-31. **Inspection findings and estimates, not instrument
 | PCB traces, fuse positions, terminal blocks | **The actual limiting factor**, not the contacts | Observed |
 | Relays **9 and 10** | Only two channels with convenient room for heavier copper, by layout accident | Observed |
 
-Uprating a channel is disproportionately expensive: IPC-2221's external relation (`I = 0.048 × ΔT^0.44 × A^0.725`) inverts to **area ∝ I^1.38**, so 15 A → 25 A needs ~2.0× the copper and 15 A → 40 A needs ~3.7×.
+Uprating a channel is disproportionately expensive: IPC-2221's external relation (`I = 0.048 × ΔT^0.44 × A^0.725`) inverts to **area ∝ I^1.379**, so 15 A → 25 A needs **2.02×** the copper and 15 A → 40 A needs **3.87×**.
+
+<!-- 3.87x corrected from 3.7x, 2026-08-06: (40/15)^(1/0.725) = 2.6667^1.37931 = 3.868. The 25 A figure (2.02x) was already correct. Ratio is independent of ΔT, so no assumption about temperature rise is involved. -->
+
+In absolute terms, at ΔT = 20 °C rise (`A = (I / (0.048 × ΔT^0.44))^1.379`, A in mils²):
+
+| Target | Required copper | Width at 2 oz (2.8 mil) | Deficit vs. the 15 A trace |
+|---|---|---|---|
+| 15 A (stock) | 449 mils² | ~160 mil (4.1 mm) | — |
+| 25 A | 908 mils² | ~324 mil | 459 mils² ≈ 21 AWG |
+| 40 A | 1,735 mils² | ~620 mil | 1,286 mils² ≈ **18 AWG** |
+
+So the copper *deficit* for a full 15 A → 40 A uprate is only about **18 AWG** worth of bonded wire — 12 AWG (5,130 mils²) overshoots it ~4×. That is a smaller conductor than the "12 AWG is ~14× a trace" comparison below might suggest reaching for; the 14× figure describes how much a 12 AWG bond *adds*, not how much is *needed*. Note also that ΔT = 20 °C is an open-bench assumption and does not hold in this sealed enclosure — see the thermal-soak caveat below.
 
 If a channel ever needs uprating, note that **solder lumping is weak and bonded wire is strong** — solder runs ~8× copper's resistivity (SAC305 ~13 µΩ·cm, Sn63Pb37 ~15, Cu 1.72), so a generous fillet buys only ~1.25× conductance, while 12 AWG (3.31 mm², ~5130 mils²) is ~14× a 2 oz/128 mil trace. Best is a conductor from busbar straight to the relay terminal, bypassing the trace.
 
