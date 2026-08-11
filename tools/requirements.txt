@@ -1,0 +1,3 @@
+# Host-side CAN test tools (tools/*.py) — bench testing canopen_app over a
+# real USB-CAN adapter. See tools/README.md for setup.
+python-can>=4.0.0
