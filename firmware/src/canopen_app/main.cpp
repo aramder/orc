@@ -19,10 +19,10 @@
 //   GPIO-Matrix-routable to any GPIO, so this is a firmware peripheral
 //   change with zero schematic/pinout impact).
 //
-// FR-004 (2026-08-05): USB control consolidated in from the now-retired
+// FR-004 (2026-08-10): USB control consolidated in from the now-retired
 // usb_bench sketch. Real ORC PCBs are in hand and under active bench test
 // as of this pass -- see docs/features/FR-004.md and firmware/README.md's
-// "Real-hardware run, 2026-08-05" section. This firmware now drives relays
+// "Real-hardware run, 2026-08-10" section. This firmware now drives relays
 // from CAN (RPDO1) or USB (plain-ASCII protocol, docs/usb-bench-interface-spec.md)
 // against the SAME PCA9555 state, with a single read-back feeding both
 // CAN's TPDO1 broadcast and USB's unsolicited STATE lines -- a change from
@@ -185,7 +185,7 @@ static bool pca9555ReadInputPorts(uint8_t &port0, uint8_t &port1) {
 // that lost its configuration to a reset originating on the isolated
 // (Domain B) side, e.g. a brief brownout of its own supply during a
 // coil-switching event, WITHOUT needing a full ORC power cycle. Real
-// hardware finding, 2026-08-05: chased on pca9555_bringup first (see that
+// hardware finding, 2026-08-10: chased on pca9555_bringup first (see that
 // sketch's setChannel() for the full story) -- a PCA9555 power-on-reset
 // reverts Config to 0xFF (all-input) and Output to its own 0xFF default
 // (NXP datasheet POR value), silently, with I2C otherwise still ACKing

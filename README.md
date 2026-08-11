@@ -6,12 +6,12 @@
   <img alt="ORC — Open Relay Controller" src="docs/media/banner-light.svg" width="100%">
 </picture>
 
-[![status](https://img.shields.io/badge/status-pre--schematic-orange?style=flat-square)](docs/design-inputs.md)
-[![controller](https://img.shields.io/badge/controller-ESP32--S3-blue?style=flat-square)](#what-it-is)
+[![status](https://img.shields.io/badge/status-real--hardware_bring--up-orange?style=flat-square)](docs/features/LOG.md)
+[![controller](https://img.shields.io/badge/controller-ESP32--C3-blue?style=flat-square)](#what-it-is)
 [![channels](https://img.shields.io/badge/channels-10_%C3%97_15A-2da44e?style=flat-square)](#what-it-is)
-[![donor](https://img.shields.io/badge/donor_unit-Motorola_PMUN1046A-6e7681?style=flat-square)](https://github.com/aramder/PMUN1046A_RE)
+[![donor](https://img.shields.io/badge/donor_unit-Motorola_PMUN1046A-6e7681?style=flat-square)](#why)
 
-**A drop-in replacement controller for the Motorola PMUN1046A relay box — same relays, harness, and enclosure; open control instead of a proprietary wired link to the radio.**
+**A drop-in replacement controller for the Motorola PMUN1046A relay box — same relays and enclosure; open CAN control over plain terminal blocks instead of the proprietary wired link to the radio.**
 
 </div>
 
@@ -19,7 +19,7 @@
 
 ## Why
 
-The PMUN1046A **Universal Relay Controller (URC)** is a sealed 12 V automotive relay box — ten relay outputs at 15 A each, per-channel fusing, a busbar, and a 60 A power feed, in a trunnion-mounted weatherproof chassis. Surplus units are common and cheap. Everything about it is desirable *except* that it only takes commands from a Motorola APX radio over a proprietary GCAI/USB link.
+The PMUN1046A **Universal Relay Controller (URC)** is a sealed 12 V automotive relay box — ten relay outputs at 15 A each, per-channel fusing, and a busbar power input rated for up to two cables at 60 A each (Motorola's install manual), in a trunnion-mounted weatherproof chassis. Power goes straight to the busbar through cable glands — no special harness needed on the input side. Surplus units are common and cheap. Everything about it is desirable *except* that it only takes commands from a Motorola APX radio over a proprietary GCAI/USB link.
 
 ORC replaces the controller board outright and makes the box a general-purpose, openly-controlled ten-channel power distribution module. **ORC** is a deliberate one-letter riff on Motorola's **URC**.
 
@@ -27,7 +27,7 @@ ORC replaces the controller board outright and makes the box a general-purpose, 
 <summary><b>About the donor unit</b> (PMUN1046A Universal Relay Controller)</summary>
 <br>
 
-Motorola's URC ships as part of the APX mobile radio ecosystem — a sealed relay box meant to switch scene lighting, sirens, and other accessory loads from the radio head. The hardware (relay board, harness, chassis) is generic 12 V automotive gear; only the controller board and its command protocol are Motorola-specific. Reverse-engineering notes on the donor unit live in the archival [`PMUN1046A_RE`](https://github.com/aramder/PMUN1046A_RE) repo.
+Motorola's URC ships as part of the APX mobile radio ecosystem — a sealed relay box meant to switch scene lighting, sirens, and other accessory loads from the radio head. The relay board and chassis are generic 12 V automotive gear; only the controller board and its proprietary GCAI/USB command link to the radio are Motorola-specific. The relay board is entirely passive (relays, fuses, terminal blocks, busbar — no drivers or regulator of its own); a small internal harness carries switched 9 V coil drive between it and the controller board. Power input has no special harness at all — it lands straight on the busbar through the enclosure's cable glands. ORC keeps the relay board and chassis, and replaces the controller board and its proprietary radio link with plain CAN over terminal blocks — no proprietary connector anywhere in this design.
 
 </details>
 
@@ -40,23 +40,23 @@ Motorola's URC ships as part of the APX mobile radio ecosystem — a sealed rela
 **Inherited from the donor unit**
 - Ten switched channels, 15 A each
 - Per-channel fusing + busbar
-- Wire harness (P/N `0975931M01`)
+- Board-to-board coil-drive harness (P/N `0975931M01`) — the internal cable between the relay board and the controller board, carrying switched 9 V coil drive; *not* a power-input harness
 - Sealed, trunnion-mounted chassis
 
 </td>
 <td width="50%" valign="top">
 
 **Rebuilt on the new controller board**
-- ESP32-S3 controller (native USB; `-1U` variant for external antenna)
+- ESP32-C3 controller (native USB for programming only; CAN-exclusive control, no wireless)
 - 9 V relay coil supply
 - Ten relay driver stages
-- Automotive-grade input protection
+- CAN terminal blocks (no proprietary connector)
 
 </td>
 </tr>
 </table>
 
-Category-wise this is a **PDM** (power distribution module) — the sPOD / Switch-Pros class of device — with an open control interface instead of a proprietary wired link to the radio.
+Category-wise this is a **PDM** (power distribution module) — the sPOD / Switch-Pros class of device — with an open CAN control interface instead of a proprietary wired link to the radio.
 
 ## Repo structure
 
@@ -65,14 +65,11 @@ One repo for design inputs, hardware, and firmware — no split-repo overhead fo
 | Path | Contents | Status |
 |---|---|---|
 | `docs/` | Design inputs, specs, architecture decisions | Active |
-| `hardware/` | KiCad project — schematic, PCB, BOM | Full schematic capture, not gate-verified |
-| `firmware/` | PlatformIO / Arduino firmware | Not yet created |
-| [`PMUN1046A_RE`](https://github.com/aramder/PMUN1046A_RE) *(separate repo)* | Reverse-engineering record of the donor unit | Closed, archival |
+| `hardware/` | KiCad project — schematic, PCB, BOM | Schematic captured, boards fabricated and populated, real-hardware bring-up in progress |
+| `firmware/` | PlatformIO / Arduino firmware | `canopen_app` is real application firmware (CAN + USB relay control), under active real-hardware bring-up |
 
 ## Status
 
-**Schematic drafted, not gate-verified.** A hierarchical capture is underway in `hardware/` — five sheets so far (Power Side A/B, MCU, Communications, I2C Isolator), migrating off an earlier flat scripted capture that's now legacy — but has **not** been through the [hardware-workflow.md](docs/hardware-workflow.md) Gate 1/2 discipline; several parts are placeholders pending live-catalog verification (see [docs/subcircuit-capture-guide.md](docs/subcircuit-capture-guide.md)). See [docs/design-inputs.md](docs/design-inputs.md) for what carries forward from the teardown and the bench measurements still outstanding.
+**Real hardware in hand and under active bring-up.** Boards were sent to fab 2026-08-02, came back populated, and have been bench-tested since 2026-08-10: the PCA9555/I2C-isolator chain, the full 10-channel relay-driver mapping, and the CAN (RPDO1/TPDO1/TPDO2/Heartbeat) and USB control paths have all been exercised on real hardware, including three real firmware bugs found and fixed along the way (see [docs/features/LOG.md](docs/features/LOG.md) for the full BUG-001/002/003 history). One real mechanical fault (a harness connector shorting against the enclosure chassis) was also found and fixed on the bench — see [docs/circuit-draft.md](docs/circuit-draft.md) for the follow-up enclosure-clearance item.
 
-The harness header — formerly the gating item — is **resolved**: 14-position, 0.1" THT, pinout measured and locked (LCSC C2977586). Remaining open items: flyback-diode presence on the relay board, Tyco relay part number, board outline/mounting, and the USB-presence-detect gate-drive stage for the source-select FET (topology sketched, values/second-stage not worked out — see subcircuit-capture-guide.md).
-
-Working conventions for part selection, asset verification, and check gates ahead of schematic capture: [docs/hardware-workflow.md](docs/hardware-workflow.md).
+Working conventions for part selection, asset verification, and check gates: [docs/hardware-workflow.md](docs/hardware-workflow.md). Bench test tooling for talking to a real board over CAN/USB from a PC: [tools/](tools/).

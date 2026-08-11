@@ -13,7 +13,7 @@ All of this is genuinely useful and is why the donor unit is worth building arou
 | Item | Part | Notes |
 |---|---|---|
 | Relay board | PMLN5639_ | **Entirely passive.** Ten Tyco relays, ten 15 A fuses, terminal blocks, power lugs, busbar. No active parts, no drivers, no regulator. |
-| Wire harness | 0975931M01 | Being reused as-is. Carries power and coil drive, not logic-level commands. |
+| Wire harness | 0975931M01 | Being reused as-is. Connects the controller board to the relay board — carries switched 9 V coil drive only, not power and not logic-level commands. Power input has its own separate path straight to the busbar via cable glands, no harness involved. |
 | Chassis | — | Sealed, metal, trunnion-mounted. Cable glands with per-wire radial gaskets. |
 | Channel rating | — | 15 A per output, matching the fuse and relay rating. |
 | Input feed | — | Busbar, one or two cables, **60 A maximum per cable** — the capability of the busbar, lugs, and glands. |

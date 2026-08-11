@@ -647,7 +647,7 @@ Updated `docs/features/FR-001.md` (fix note under the REOPENED heading, acceptan
 
 **Files**: `firmware/src/usb_bench/main.cpp`, `docs/features/FR-001.md`, `docs/features/LOG.md`, `firmware/README.md`. This logbook entry. Did not touch `canopen_app`, even though FR-001's own open questions flag it as worth a quick look for the identical halt-the-whole-sketch pattern -- out of scope for this fix, noted but not investigated this pass.
 
-## 2026-08-05 -- FR-004: consolidate usb_bench into canopen_app, drive relays from CAN or USB
+## 2026-08-10 -- FR-004: consolidate usb_bench into canopen_app, drive relays from CAN or USB
 
 User, mid real-hardware bench-testing session on the actual ORC PCB: "there should be USB control built into the main application firmware - I want to be able to drive from either CAN or USB interfaces." Logged as FR-004 (docs/features/FR-004.md), following the same shard bookkeeping convention as FR-001/002/003. Two decisions asked and answered before writing code: (1) retire the standalone usb_bench sketch (user's explicit choice, over keeping both), (2) fail-safe interaction -- "any activity resets both" (over keeping the two fail-safes fully independent).
 

@@ -79,7 +79,7 @@ static void configurePca9555Direction() {
 // Drive channel `ch` (1-10) HIGH, all other 9 channels LOW. Uses the real
 // routing-driven map from lib/orc_relay_map/, not a sequential assumption.
 //
-// Real-hardware finding and root-cause chase, 2026-08-05, first ORC PCB
+// Real-hardware finding and root-cause chase, 2026-08-10, first ORC PCB
 // tested, once it was mounted in its enclosure:
 // 1. Exactly one relay ever clicked, ever -- including on later loop
 //    passes back through the same channel -- until the board was fully
