@@ -147,22 +147,23 @@ def command_and_confirm(bus: can.Bus, node_id: int, mask: int, label: str) -> bo
     applied. Prints a one-line result either way. Returns True on a
     confirmed match.
 
-    Real-hardware finding, 2026-08 -- NOT solved by this function, recorded
-    here as an open item for firmware-side investigation, not host-side
-    tooling: a full 1-10 sweep against real hardware showed roughly every
-    other TPDO1 missing entirely, with the survivors consistently reporting
-    the *previous* step's mask (a one-cycle lag), while the relays
-    themselves were independently confirmed (by ear/eye) to click through
-    correctly in real time. The first theory -- a stale queued TPDO1 from
-    the previous step sitting in the host's own receive buffer -- was
-    tested directly by draining immediately before every send here, and it
-    made no difference at all: same lag, same drop pattern. That rules out
-    a host-side queueing artifact. The lag/loss is either in canopen_app's
-    actual TPDO1-send timing relative to RPDO1 receipt, or genuine
-    frame-level loss/retry on the bus itself -- both are firmware/hardware
-    questions, not something this script can fix by retrying or draining
-    harder. Left as an honest FAIL rather than adding retry-tolerant
-    matching that would mask whichever of those two it turns out to be."""
+    Real-hardware finding, 2026-08 -- root-caused and fixed as of 2026-08-10,
+    see .claude/tpdo1-lag-investigation-prompt.md (gitignored, local) for the
+    full trail: an early full 1-10 sweep showed roughly every other TPDO1
+    missing entirely, with survivors reporting the *previous* step's mask (a
+    one-cycle lag), while the relays themselves clicked through correctly in
+    real time. Host-side stale-queue buildup was ruled out first (draining
+    before every send here made no difference). A bus-health theory (TWAI
+    hardware retrying on a not-yet-settled bus) was tested next and also
+    ruled out -- re-running after tx_error_counter held at 0 for 10+ seconds,
+    with termination confirmed correctly populated, still produced the
+    identical pattern. Actual cause: canopen_app's handleRpdo1() logged the
+    incoming RPDO1 via Serial.printf() *before* sending TPDO1, and native
+    USB-CDC writes can block up to ~2000ms if the physical USB link is up but
+    nothing is draining it -- longer than this function's confirm window.
+    Fixed firmware-side (Serial.setTxTimeoutMs(20) in setup()), re-verified
+    against real hardware at 12/12 confirmed. drain_stale_frames() is kept
+    here regardless -- it's still correct/useful, just wasn't the fix."""
     drain_stale_frames(bus)
     print(f"  {label}: {format_channel_mask(mask)} ... ", end="", flush=True)
     send_rpdo1(bus, node_id, mask)

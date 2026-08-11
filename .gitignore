@@ -46,6 +46,7 @@ Thumbs.db
 .claude/*
 !.claude/kicad-mcp-logbook.md
 hardware/.kicad-mcp/
+_*
 
 # KiCad MCP debug/export artifacts -- regenerable, not authoritative
 hardware/output/

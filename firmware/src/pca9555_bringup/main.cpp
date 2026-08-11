@@ -65,9 +65,62 @@ static bool writeReg(uint8_t reg, uint8_t value) {
   return true;
 }
 
+// Writes direction (Config) and polarity registers -- the two registers
+// that define "which pins are outputs" and "not inverted." Called once at
+// boot AND on every setChannel() call below -- see that function's comment
+// for why the repeat isn't paranoia.
+static void configurePca9555Direction() {
+  writeReg(kRegPolarityPort0, 0x00);
+  writeReg(kRegPolarityPort1, 0x00);
+  writeReg(kRegConfigPort0, kOrcPca9555ConfigPort0);
+  writeReg(kRegConfigPort1, kOrcPca9555ConfigPort1);
+}
+
 // Drive channel `ch` (1-10) HIGH, all other 9 channels LOW. Uses the real
 // routing-driven map from lib/orc_relay_map/, not a sequential assumption.
+//
+// Real-hardware finding and root-cause chase, 2026-08-05, first ORC PCB
+// tested, once it was mounted in its enclosure:
+// 1. Exactly one relay ever clicked, ever -- including on later loop
+//    passes back through the same channel -- until the board was fully
+//    power-cycled, at which point exactly one more click happened before
+//    going silent again. I2C itself looked perfectly healthy throughout
+//    (every write ACKed, zero "I2C write FAILED" prints) -- the working
+//    theory at the time was a PCA9555 power-on-reset silently reverting
+//    its direction back to all-input, with subsequent Output writes still
+//    ACKing but having no physical effect. Re-issuing Config/Polarity
+//    every step (this function, called from every setChannel()) was added
+//    to self-heal that scenario if it recurred.
+// 2. That change immediately surfaced a SECOND symptom: I2C writes started
+//    failing with driver-level ESP_ERR_INVALID_STATE errors instead of
+//    ACKing. A manual I2C bus-recovery routine (bit-banged SCL clock-out +
+//    forced STOP + Wire re-init) was tried here and REMOVED again the same
+//    session -- real-hardware testing showed every retry failed
+//    identically right after "recovery," meaning Wire.end()/Wire.begin()
+//    doesn't cleanly tear down and rebuild this Arduino-ESP32 core's newer
+//    i2c_master ("i2c-ng") driver state. Left in, it would have been
+//    broken code claiming success it didn't have -- worse than not having
+//    it. If real I2C bus recovery is needed here in the future, it needs a
+//    driver-level fix (or a full ESP.restart()), not this approach.
+// 3. Root cause, found by physical inspection, same session: **the
+//    board's output-connector through-hole pins were shorting to the
+//    enclosure chassis.** That explains both symptoms as one electrical
+//    fault, not two separate bugs: the short pulled down shared supply
+//    rail(s) hard enough under coil-switching current to both starve the
+//    coil drive (user-reported "very quiet actuations, not enough to close
+//    the contacts") and glitch the PCA9555's own logic supply, corrupting
+//    I2C transactions. Confirmed as the real cause, not firmware, not a
+//    coil-supply sizing problem -- see docs/circuit-draft.md and
+//    docs/design-inputs.md for the mechanical-clearance follow-up this
+//    should turn into (standoff/insulation/enclosure-fit, not a schematic
+//    change).
+//
+// configurePca9555Direction() being called every step is left in place as
+// cheap, harmless defense-in-depth against a future transient brownout of
+// whatever cause -- it did not cause and does not fix the short above.
 static void setChannel(uint8_t ch) {
+  configurePca9555Direction();
+
   uint16_t channelMask = (uint16_t)(1u << (ch - 1));
   uint8_t port0 = 0x00;
   uint8_t port1 = 0x00;

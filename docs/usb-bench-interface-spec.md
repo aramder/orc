@@ -1,11 +1,18 @@
 # USB bench/debug interface — spec for firmware implementation
 
-Status: **implemented** (build-verified only, no real hardware yet — see
-[`docs/features/FR-001.md`](features/FR-001.md) for the tracked shard and
-[`firmware/src/usb_bench/main.cpp`](../firmware/src/usb_bench/main.cpp) for
-the code). Originally written for handoff to firmware work; that handoff has
-happened. This document remains the wire-protocol/rationale source of truth
-— the implementation tracks it, doesn't fork it.
+Status: **implemented, real-hardware confirmed, and consolidated into
+`canopen_app`** (2026-08-05, FR-004 — see
+[`docs/features/FR-004.md`](features/FR-004.md)). This protocol originally
+shipped as its own standalone `usb_bench` sketch/environment
+([`docs/features/FR-001.md`](features/FR-001.md), now superseded); it now
+lives in [`firmware/src/canopen_app/main.cpp`](../firmware/src/canopen_app/main.cpp)
+alongside the CAN protocol, driving the same PCA9555 state, per the user's
+explicit ask to be able to drive relays from either CAN or USB. This
+document remains the wire-protocol/rationale source of truth — the
+implementation tracks it, doesn't fork it. Real-hardware confirmed
+2026-08-05: all 10 relays driven ON over this protocol on a real, powered
+ORC PCB, 0.47A real coil current observed (matches the ~0.45A design
+target).
 
 ## Scope — read this before anything else
 

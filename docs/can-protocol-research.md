@@ -224,6 +224,27 @@ objects (`6200h` sub-index 1 = byte 0, sub-index 2 = byte 1):
 | 1 | 0–1 | Channels 9–10, one bit per channel, 1 = energize |
 | 1 | 2–7 | Reserved, send 0 |
 
+**Recommended commanding interval: ~1 second or slower.** Real-hardware
+testing (`docs/features/BUG-002.md`, `BUG-003.md`, 2026-08-10) confirmed a
+1s/2s RPDO1 cadence works cleanly and reliably (12/12 confirmed on a real
+board over real CAN). Below ~1s (tested down to 0.5s and 0.3s), TPDO1
+confirmation reliability degrades — some commands go unconfirmed, some
+TPDO1s report a stale prior state — and ORC's own periodic Heartbeat/TPDO2
+can go fully silent for the rest of a fast-cadence session. Root-caused
+down to two contributing factors, one fixed and one not: a blocking
+USB-CDC diagnostic-print hazard in `canopen_app`'s hot RPDO1 path (fixed,
+`printBestEffort()`) improved but did not fully resolve it; the remainder
+correlates with real `CAN_ERR_CRTL` (RX+TX error-warning) frames recurring
+every ~2-2.4s specifically under fast bidirectional traffic, evidence of a
+genuine bus/controller-level condition rather than a firmware logic bug —
+see `BUG-003.md` for the full investigation trail. **Not expected to
+matter in practice**: a real host commanding relay changes in response to
+user/vehicle events has no reason to approach sub-second RPDO1 cadence.
+If a future use case genuinely needs faster commanding, this needs real
+electrical-level investigation (oscilloscope/protocol analyzer on the
+physical bus under the exact failing traffic pattern) before more firmware
+changes are attempted — not undertaken as of this note.
+
 ### TPDO1 — "relay status / applied state" (ORC unit → host)
 
 COB-ID `0x180 + NodeID`, DLC 2 bytes, same bit layout as RPDO1, mapped from CiA

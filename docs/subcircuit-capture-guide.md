@@ -269,6 +269,8 @@ Spares are the low 3 bits of Port 0 and the high 3 bits of Port 1 — not a cont
 
 **Resolved 2026-08-05**: the real mapping above is now implemented in `firmware/lib/orc_relay_map/orc_relay_map.h` (a new shared lib, single source of truth for this table in firmware) — `pca9555_bringup`'s `setChannel()` corrected to use it, and the new `canopen_app` application firmware (RPDO1/TPDO1 handling) uses it too, catching what would otherwise have been a real bug in ORC's first application firmware before it ever ran. `kConfigPort0Outputs`/`kConfigPort1Mask` replaced by `kOrcPca9555ConfigPort0`/`kOrcPca9555ConfigPort1` (`0x07`/`0xE0`, matching this table exactly) in the same lib. All affected firmware environments rebuilt and re-verified.
 
+**Real-hardware confirmed, same day, 2026-08-05** — first end-to-end verification of this table against the actual fabricated board, not just internal firmware/schematic consistency: `pca9555_bringup` flashed to a real, powered ORC PCB and run through its full walking-single-HIGH pattern (channels 1-10 in sequence). User followed along with a DMM in continuity mode on the coil harness pins and confirmed each printed `Channel N HIGH` corresponds to the correct physical channel N — all 10, no swaps, no misses. This is the strongest confirmation this table has had: schematic → `orc_relay_map.h` → real silicon → real coil driver stage → real harness pin, checked at every hop.
+
 ### Per-channel coil driver ×10 (channels 1–10)
 
 Identical stage repeated for each relay channel: `RBn` (PCA9555 output → NPN base) → `QNn` (level-shift NPN) → `RPn` (gate pull-up) → `QPn` (high-side coil switch) → harness pin `n+2`.
