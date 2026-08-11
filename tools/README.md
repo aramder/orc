@@ -43,9 +43,9 @@ python can_monitor.py --interface slcan --channel COM5
 
 Ctrl+C to stop, or pass `--timeout <seconds>` to auto-stop after a quiet period.
 
-### 2. `relay_toggle_test.py` — active round-trip test
+### 2. `relay_toggle_test.py` — sweep + all-on demo/test
 
-Sends RPDO1 to energize a channel, waits for TPDO1 to confirm it actually applied, de-energizes it, confirms that too. This is the real end-to-end path (host → RPDO1 → ORC → PCA9555 → TPDO1 readback → host), the closest thing to "does my board actually work" without a scope or an LED jig on the relay outputs.
+Runs a fixed sequence over CAN, confirming every step via TPDO1 readback: sweeps channels 1 through 10 one at a time (1s each, exclusive — only that channel is on at each step), pauses with everything off, turns all 10 channels on at once, pauses again, then cleans up (all off) on exit. This is the real end-to-end path (host → RPDO1 → ORC → PCA9555 → TPDO1 readback → host), and it exercises both a single-channel command and an all-channels-at-once command — a real distinction on this hardware, since RPDO1 always sends the whole 10-bit state, not a per-bit toggle.
 
 Needs the board's **node ID** (read directly off its DIP switch, weight-labeled `1 2 4 8` — see `docs/circuit-draft.md`'s "Node-ID address input" section).
 
@@ -53,13 +53,13 @@ Needs the board's **node ID** (read directly off its DIP switch, weight-labeled 
 python relay_toggle_test.py --interface slcan --channel COM5 --node-id 1
 ```
 
-Tests all 10 channels in sequence by default (0.5s hold between on/off — it's audibly/visibly cycling real relays, kept short on purpose). Test one channel only with `--channel-num`:
+Tune the timing with `--sweep-seconds` (default 1.0s per channel) and `--pause-seconds` (default 2.0s, used both for the all-off pause before the all-on step and as the all-on hold duration):
 
 ```
-python relay_toggle_test.py --interface slcan --channel COM5 --node-id 1 --channel-num 3
+python relay_toggle_test.py --interface slcan --channel COM5 --node-id 1 --sweep-seconds 0.5 --pause-seconds 3
 ```
 
-Exit code is 0 if every tested channel passed, 1 otherwise — usable in a simple pass/fail bench check, not just interactively.
+Exit code is 0 if every step's TPDO1 confirmation matched what was commanded, 1 otherwise — usable in a simple pass/fail bench check, not just interactively. Ctrl+C at any point still runs the all-off cleanup before exiting.
 
 ## `orc_canopen.py`
 

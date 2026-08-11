@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
-"""ORC bench test 2: relay channel round-trip test.
+"""ORC bench test 2: relay sweep + all-on demo/test.
 
-Sends RPDO1 to energize a channel, waits for TPDO1 to confirm it applied,
-then de-energizes it and confirms that too. Exercises the real command path
-end-to-end (host -> RPDO1 -> ORC -> PCA9555 -> TPDO1 readback -> host) --
-the most direct "does my board actually work" test available without a
-scope or an LED jig on the relay outputs themselves.
+Runs a fixed sequence over CAN, confirming every step via TPDO1 readback:
+
+  1. Sweep channels 1 through 10, one at a time, 1 second each (each step
+     energizes exactly that channel and de-energizes every other one --
+     a classic "walking" chase, same pattern firmware/src/pca9555_bringup
+     uses for its own bring-up walk).
+  2. All channels off, pause.
+  3. All 10 channels ON at once, pause.
+  4. All channels off (cleanup -- doesn't leave relays energized at exit).
+
+Exercises the real command path end-to-end (host -> RPDO1 -> ORC -> PCA9555
+-> TPDO1 readback -> host) across both a single-channel and an all-channels
+command, which is a real distinction for this hardware: RPDO1 sends the
+*whole* 10-bit state every time, not a per-bit toggle, so "all on" is one
+command, not ten.
 
 Run can_monitor.py first if you haven't already confirmed the board is on
 the bus and alive -- this script requires knowing (or guessing and having it
 fail loudly) the target's --node-id, unlike the monitor's auto-discovery.
 
-Setup: see tools/README.md. Example (slcan, adapter on COM5, ORC node 1):
-    python relay_toggle_test.py --interface slcan --channel COM5 --node-id 1
-
-Test a single channel:
-    python relay_toggle_test.py --interface slcan --channel COM5 --node-id 1 --channel-num 3
-
-Test all 10 channels in sequence (default):
+Example (slcan, adapter on COM5, ORC node 1):
     python relay_toggle_test.py --interface slcan --channel COM5 --node-id 1
 """
 
@@ -30,18 +34,19 @@ import time
 import can
 
 from orc_canopen import (
+    ALL_CHANNELS_MASK,
     BUS_BITRATE,
-    channel_is_set,
     channel_mask_set,
     cob_id,
     COB_ID_RPDO1_BASE,
     COB_ID_TPDO1_BASE,
+    format_channel_mask,
     pack_channel_mask,
     unpack_channel_mask,
 )
 
 # How long to wait for TPDO1 to confirm a commanded state before declaring
-# that channel a failure. canopen_app sends TPDO1 immediately after applying
+# that step a failure. canopen_app sends TPDO1 immediately after applying
 # every RPDO1 (see firmware/src/canopen_app/main.cpp's applyRelayCommand()),
 # so this is generous margin, not a tuned real-time deadline.
 CONFIRM_TIMEOUT_S = 2.0
@@ -53,8 +58,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--channel", required=True, help="e.g. a COM port for slcan (COM5), or a device index for gs_usb (0)")
     p.add_argument("--node-id", type=int, required=True, help="ORC unit's node ID (1-15, read off its DIP switch)")
     p.add_argument("--bitrate", type=int, default=BUS_BITRATE, help=f"default {BUS_BITRATE} (locked bus bitrate)")
-    p.add_argument("--channel-num", type=int, default=None, help="test only this channel (1-10); default: all 10 in sequence")
-    p.add_argument("--hold-seconds", type=float, default=0.5, help="how long to leave a channel energized before de-energizing it (default 0.5s -- keep this short, it's audibly/visibly cycling a real relay)")
+    p.add_argument("--sweep-seconds", type=float, default=1.0, help="how long each channel stays on during the 1-10 sweep (default 1.0s)")
+    p.add_argument("--pause-seconds", type=float, default=2.0, help="pause duration: all-off before the all-on step, and hold duration of the all-on step itself (default 2.0s)")
     return p.parse_args()
 
 
@@ -85,40 +90,25 @@ def wait_for_tpdo1(bus: can.Bus, node_id: int, timeout_s: float) -> int | None:
             return unpack_channel_mask(bytes(msg.data))
 
 
-def test_one_channel(bus: can.Bus, node_id: int, channel: int, hold_seconds: float) -> bool:
-    """Energize, confirm, de-energize, confirm. Returns True if both
-    confirmations matched what was commanded."""
-    print(f"  Channel {channel}: energizing ... ", end="", flush=True)
-    on_mask = channel_mask_set(channel, True)
-    send_rpdo1(bus, node_id, on_mask)
+def command_and_confirm(bus: can.Bus, node_id: int, mask: int, label: str) -> bool:
+    """Sends one RPDO1 and waits for TPDO1 to confirm the exact mask was
+    applied. Prints a one-line result either way. Returns True on a
+    confirmed match."""
+    print(f"  {label}: {format_channel_mask(mask)} ... ", end="", flush=True)
+    send_rpdo1(bus, node_id, mask)
     applied = wait_for_tpdo1(bus, node_id, CONFIRM_TIMEOUT_S)
     if applied is None:
         print("FAIL (no TPDO1 received)")
         return False
-    if not channel_is_set(applied, channel):
-        print(f"FAIL (commanded ON, TPDO1 reports mask 0x{applied:03X} -- channel still off)")
+    if applied != mask:
+        print(f"FAIL (commanded 0x{mask:03X}, TPDO1 reports 0x{applied:03X})")
         return False
-    print("OK (TPDO1 confirms ON)")
-
-    time.sleep(hold_seconds)
-
-    print(f"  Channel {channel}: de-energizing ... ", end="", flush=True)
-    off_mask = channel_mask_set(channel, False, current_mask=on_mask)
-    send_rpdo1(bus, node_id, off_mask)
-    applied = wait_for_tpdo1(bus, node_id, CONFIRM_TIMEOUT_S)
-    if applied is None:
-        print("FAIL (no TPDO1 received)")
-        return False
-    if channel_is_set(applied, channel):
-        print(f"FAIL (commanded OFF, TPDO1 reports mask 0x{applied:03X} -- channel still on)")
-        return False
-    print("OK (TPDO1 confirms OFF)")
+    print("OK")
     return True
 
 
 def main() -> int:
     args = parse_args()
-    channels = [args.channel_num] if args.channel_num is not None else list(range(1, 11))
 
     print(f"Opening {args.interface}:{args.channel} @ {args.bitrate} bit/s, target NodeID {args.node_id} ...")
     try:
@@ -127,22 +117,33 @@ def main() -> int:
         print(f"ERROR: could not open the CAN interface: {exc}", file=sys.stderr)
         return 1
 
-    results: dict[int, bool] = {}
+    results: list[bool] = []
     try:
-        print(f"Testing {len(channels)} channel(s), {args.hold_seconds}s hold between on/off.\n")
-        for ch in channels:
-            results[ch] = test_one_channel(bus, args.node_id, ch, args.hold_seconds)
+        print(f"\n--- Sweep: channels 1-10, one at a time, {args.sweep_seconds}s each ---")
+        for ch in range(1, 11):
+            mask = channel_mask_set(ch, True)  # exclusive -- this channel only
+            results.append(command_and_confirm(bus, args.node_id, mask, f"Channel {ch}"))
+            time.sleep(args.sweep_seconds)
+
+        print(f"\n--- All off, {args.pause_seconds}s pause ---")
+        results.append(command_and_confirm(bus, args.node_id, 0, "All off"))
+        time.sleep(args.pause_seconds)
+
+        print(f"\n--- All 10 channels ON at once, {args.pause_seconds}s pause ---")
+        results.append(command_and_confirm(bus, args.node_id, ALL_CHANNELS_MASK, "All on"))
+        time.sleep(args.pause_seconds)
+
     except KeyboardInterrupt:
         print("\nInterrupted.")
     finally:
+        print("\n--- Cleanup: all off ---")
+        command_and_confirm(bus, args.node_id, 0, "All off")
         bus.shutdown()
 
-    passed = [ch for ch, ok in results.items() if ok]
-    failed = [ch for ch, ok in results.items() if not ok]
-    print(f"\n{len(passed)}/{len(results)} channel(s) passed.")
-    if failed:
-        print(f"FAILED: {failed}")
-        print("If every channel failed with 'no TPDO1 received': check --node-id matches the "
+    passed = sum(1 for ok in results if ok)
+    print(f"\n{passed}/{len(results)} step(s) confirmed.")
+    if passed != len(results):
+        print("If every step failed with 'no TPDO1 received': check --node-id matches the "
               "board's DIP switch, and that canopen_app (not a bring-up sketch) is running.")
         return 1
     return 0

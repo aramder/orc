@@ -26,6 +26,9 @@ COB_ID_HEARTBEAT_BASE = 0x700  # ORC -> host, periodic liveness
 # Every node on the bus must agree on this value.
 BUS_BITRATE = 125_000
 
+# All 10 channel bits set (bits 0-9) -- the "all relays on" RPDO1/TPDO1 mask.
+ALL_CHANNELS_MASK = (1 << 10) - 1
+
 # --- Heartbeat: NMT state byte values ---------------------------------------
 # Per CANopenNode's reference values, cited in can-protocol-research.md.
 NMT_STATE_NAMES = {
