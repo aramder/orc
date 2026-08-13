@@ -15,6 +15,8 @@
 
 Independent open-source project. Not affiliated with, endorsed by, or connected to Motorola Solutions, Inc. — see [TRADEMARKS.md](TRADEMARKS.md).
 
+[**Project writeup and photos →**](https://aramd.net/PMUN1046A-Relay-Controller/)
+
 **Safety:** this switches high-current DC in a vehicle. It is not safety qualified and must not be used for safety-critical functions. Read [DISCLAIMER.md](DISCLAIMER.md) before building anything.
 
 </div>
@@ -63,6 +65,18 @@ Motorola's URC ships as part of the APX mobile radio ecosystem — a sealed rela
 </table>
 
 Category-wise this is a **PDM** (power distribution module) — the sPOD / Switch-Pros class of device — with an open CAN control interface instead of a proprietary wired link to the radio.
+
+## The board
+
+<img src="docs/media/photos/board-comparison-top.jpg" alt="ORC Rev A (green, right) next to the OEM PMUN1046A control PCB (blue, left), top-down" width="100%">
+
+<em>ORC Rev A (green, right) and the OEM control PCB it replaces (blue, left).</em>
+
+<img src="docs/media/photos/orc-in-enclosure.jpg" alt="ORC Rev A installed in the PMUN1046A enclosure alongside the OEM relay board" width="60%">
+
+<em>ORC Rev A installed in the donor enclosure, alongside the OEM relay board that stays.</em>
+
+**Full writeup, build story, and more photos:** [Open Relay Controller for the Motorola PMUN1046A](https://aramd.net/PMUN1046A-Relay-Controller/).
 
 ## Repo structure
 
