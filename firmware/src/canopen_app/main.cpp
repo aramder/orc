@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 // ORC application firmware: CANopen relay control, driven from CAN or USB
 //
 // This IS application-level firmware, unlike everything else in firmware/ --

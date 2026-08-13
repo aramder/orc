@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 #include "orc_can_addr.h"
 
 void orcInitCanAddrPins() {

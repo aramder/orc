@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 // ORC shared helper: CANopen message/COB-ID encode-decode primitives.
 //
 // This is deliberately NOT a general-purpose CANopen stack -- per

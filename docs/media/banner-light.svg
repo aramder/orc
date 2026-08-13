@@ -8,7 +8,7 @@
   <rect width="1200" height="280" fill="url(#bg)"/>
   <text x="60" y="118" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="72" font-weight="700" fill="#1f2328">ORC</text>
   <text x="60" y="160" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="24" font-weight="400" fill="#57606a">Open Relay Controller</text>
-  <text x="60" y="200" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#6e7781">Open, ESP32-S3 controller for the Motorola PMUN1046A relay box</text>
+  <text x="60" y="200" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#6e7781">Open ESP32-C3 relay controller — 10 channels, CAN</text>
   <!-- ten-channel relay indicator -->
   <g transform="translate(700,90)">
     <text x="0" y="-14" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#6e7781" letter-spacing="2">10 CHANNELS · 15A EACH</text>

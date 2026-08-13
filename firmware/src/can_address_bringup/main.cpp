@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 // ORC firmware bring-up: configurable CAN node address
 //
 // NOT application firmware. Reads the 4-bit address-select bank (external

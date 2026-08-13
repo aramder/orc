@@ -1,6 +1,6 @@
 # ORC circuit draft — parts and topology
 
-Working document for parts selection and topology, ahead of schematic capture in `orc-hardware`. Carries forward from [design-inputs.md](design-inputs.md); does not repeat facts already established there.
+Working document for parts selection and topology, ahead of schematic capture in `hardware/`. Carries forward from [design-inputs.md](design-inputs.md); does not repeat facts already established there.
 
 **Status: draft, not locked.** Several items below are flagged *unresolved* — do not order parts against those without a follow-up pass.
 

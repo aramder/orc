@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Aram Dergevorkian
 """ORC bench test 1: passive CAN bus monitor.
 
 Listens on the bus and decodes anything that looks like ORC traffic --

@@ -2,9 +2,13 @@
 
 What carries forward from the PMUN1046A teardown, what has to be built from scratch, and what still needs measuring before layout.
 
-Source of truth for the teardown itself is the writeup in
-[PMUN1046A_RE](https://github.com/aramder/PMUN1046A_RE) — specifically its
-`docs/pmun1046a-relay-controller.md`. Facts are cited back to it rather than duplicated here; where a figure is **unverified**, it says so.
+Source of truth for the teardown itself is a private working record, not published. Facts are cited back to it rather than duplicated here; where a figure is **unverified**, it says so.
+
+## Provenance of the donor unit
+
+The donor unit was purchased outright on the surplus market. No non-disclosure agreement, accessory-program enrollment, license agreement, or terms-of-service click-through was entered into to obtain or inspect it, and no lock, encryption, or authentication measure was defeated to examine it — the unit was opened with hand tools and characterized by measurement.
+
+Everything recorded here is either a fact measured from that unit or a fact cited by section to Motorola's published service and installation documentation. No Motorola firmware, source code, drawing, photograph, or manual text is reproduced in this repository. ORC does not implement or interoperate with the donor unit's proprietary GCAI link; it replaces the controller board entirely. See [TRADEMARKS.md](../TRADEMARKS.md).
 
 ## Inherited from the donor unit
 
@@ -157,4 +161,4 @@ Single-use parts — order spares per unit opened:
 - **Light Bar Gasket** 3278310A01 (×2 per unit)
 - **Thermal pad** 75012026001 (×2 per unit)
 
-Reassembly torques and the full disassembly sequence are in the PMUN1046A_RE writeup. The main O-ring must not be pinched or the enclosure loses its seal.
+Reassembly torques and the full disassembly sequence are in the private teardown record. The main O-ring must not be pinched or the enclosure loses its seal.

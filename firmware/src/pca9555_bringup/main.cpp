@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 // ORC firmware bring-up: PCA9555 I2C GPIO expander
 //
 // NOT application firmware -- no relay control logic here. Configures the

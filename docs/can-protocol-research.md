@@ -155,8 +155,8 @@ Surfaced from the other side of this integration: `rigos-core` (the Pi host
 software that will command ORC) chose its physical CAN adapter for ORC's bus
 — a Jhoinrch RH-02 USB-CAN adapter (CANable-clone, STM32G431CBT6), rated up to
 1 Mbps — while drafting its own relay-control FR
-([rigos-core FR-059](https://github.com/aramder/rigos-core) — cross-repo
-reference, not duplicated here), and in doing so noticed **ORC had never
+(`rigos-core` FR-059 — cross-repo
+reference into a private sibling project, not duplicated here), and in doing so noticed **ORC had never
 actually locked a bus bitrate anywhere in this repo.**
 
 **Decision: 125 kbit/s**, user's call — this is a dedicated accessory-control

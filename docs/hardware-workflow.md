@@ -84,7 +84,7 @@ Once `hardware/` exists and schematic/PCB capture starts:
 
 ## BOM split (for later — release stage)
 
-Keep procurement and production BOM as separate artifacts once `orc-hardware`-equivalent (`hardware/`) work starts generating them:
+Keep procurement and production BOM as separate artifacts once `hardware/` work starts generating them:
 
 - **Procurement BOM** — what you actually order, from the sourcing pass above.
 - **Production BOM / CPL** — what goes to a fab/assembly house, generated from the final layout, not hand-copied from the procurement list.

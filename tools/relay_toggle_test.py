@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Aram Dergevorkian
 """ORC bench test 2: relay sweep + all-on demo/test.
 
 Runs a fixed sequence over CAN, confirming every step via TPDO1 readback:

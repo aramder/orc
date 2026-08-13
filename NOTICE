@@ -1,0 +1,27 @@
+ORC — Open Relay Controller
+Copyright (c) 2026 Aram Dergevorkian
+
+This repository contains hardware design files, firmware, host-side tools,
+and documentation developed independently by the ORC project.
+
+Portions of this repository are licensed as follows:
+
+  hardware/   CERN-OHL-W-2.0
+  firmware/   Apache-2.0
+  tools/      Apache-2.0
+  docs/       CC-BY-4.0
+
+Full license texts are in LICENSES/.
+
+The KiCad projects under hardware/ embed symbol and footprint definitions
+from the upstream KiCad libraries, which are distributed under the KiCad
+Library License (CC-BY-SA-4.0 with a design exception). That exception
+permits their use in a design without imposing licensing obligations on
+the design itself.
+
+This project is not affiliated with, endorsed by, sponsored by, or
+connected to Motorola Solutions, Inc. See TRADEMARKS.md.
+
+Anything built from this repository switches high-current DC in a vehicle
+and is not safety qualified. See DISCLAIMER.md before building or
+installing anything.

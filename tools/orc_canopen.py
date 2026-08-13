@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Aram Dergevorkian
 """ORC CANopen wire-protocol constants and encode/decode helpers.
 
 Host-side (Python/python-can) counterpart to firmware/lib/orc_canopen/orc_canopen.h.

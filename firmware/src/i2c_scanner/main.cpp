@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 // ORC firmware bring-up: I2C bus scanner
 //
 // NOT application firmware. Verifies IO-level pinout only:

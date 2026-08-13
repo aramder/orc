@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 // ORC shared helper: read the 4-bit configurable CAN node address.
 //
 // Address-select hardware lives on the MCU's own (non-isolated, Domain A)

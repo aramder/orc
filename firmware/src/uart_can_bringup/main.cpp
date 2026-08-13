@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 // ORC firmware bring-up: UART -> SN65HVD230 CAN transceiver
 //
 // NOT application firmware -- no CAN message handling, no relay logic.

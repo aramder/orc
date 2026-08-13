@@ -9,9 +9,13 @@
 [![status](https://img.shields.io/badge/status-real--hardware_bring--up-orange?style=flat-square)](docs/features/LOG.md)
 [![controller](https://img.shields.io/badge/controller-ESP32--C3-blue?style=flat-square)](#what-it-is)
 [![channels](https://img.shields.io/badge/channels-10_%C3%97_15A-2da44e?style=flat-square)](#what-it-is)
-[![donor](https://img.shields.io/badge/donor_unit-Motorola_PMUN1046A-6e7681?style=flat-square)](#why)
+[![donor](https://img.shields.io/badge/donor_unit-PMUN1046A-6e7681?style=flat-square)](#why)
 
-**A drop-in replacement controller for the Motorola PMUN1046A relay box — same relays and enclosure; open CAN control over plain terminal blocks instead of the proprietary wired link to the radio.**
+**A replacement controller board for surplus Motorola PMUN1046A relay boxes — same relays and enclosure; open CAN control over plain terminal blocks instead of the proprietary wired link to the radio.**
+
+Independent open-source project. Not affiliated with, endorsed by, or connected to Motorola Solutions, Inc. — see [TRADEMARKS.md](TRADEMARKS.md).
+
+**Safety:** this switches high-current DC in a vehicle. It is not safety qualified and must not be used for safety-critical functions. Read [DISCLAIMER.md](DISCLAIMER.md) before building anything.
 
 </div>
 
@@ -21,7 +25,9 @@
 
 The PMUN1046A **Universal Relay Controller (URC)** is a sealed 12 V automotive relay box — ten relay outputs at 15 A each, per-channel fusing, and a busbar power input rated for up to two cables at 60 A each (Motorola's install manual), in a trunnion-mounted weatherproof chassis. Power goes straight to the busbar through cable glands — no special harness needed on the input side. Surplus units are common and cheap. Everything about it is desirable *except* that it only takes commands from a Motorola APX radio over a proprietary GCAI/USB link.
 
-ORC replaces the controller board outright and makes the box a general-purpose, openly-controlled ten-channel power distribution module. **ORC** is a deliberate one-letter riff on Motorola's **URC**.
+ORC replaces the controller board outright and makes the box a general-purpose, openly-controlled ten-channel power distribution module. **ORC** stands for Open Relay Controller.
+
+ORC does not implement, emulate, or interoperate with the GCAI link. The controller board is an independent design that replaces the donor unit's controller board entirely; control is plain CAN or USB.
 
 <details>
 <summary><b>About the donor unit</b> (PMUN1046A Universal Relay Controller)</summary>
@@ -67,6 +73,19 @@ One repo for design inputs, hardware, and firmware — no split-repo overhead fo
 | `docs/` | Design inputs, specs, architecture decisions | Active |
 | `hardware/` | KiCad project — schematic, PCB, BOM | Schematic captured, boards fabricated and populated, real-hardware bring-up in progress |
 | `firmware/` | PlatformIO / Arduino firmware | `canopen_app` is real application firmware (CAN + USB relay control), under active real-hardware bring-up |
+| `tools/` | Host-side CAN/USB bench test scripts | Used against real hardware |
+
+## License
+
+Different parts of the repo carry different licenses. Full texts are in [LICENSES/](LICENSES/); each directory also carries its own `LICENSE` file.
+
+| Path | License |
+|---|---|
+| `hardware/` | [CERN-OHL-W-2.0](LICENSES/CERN-OHL-W-2.0.txt) |
+| `firmware/`, `tools/` | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `docs/` | [CC-BY-4.0](LICENSES/CC-BY-4.0.txt) |
+
+Hardware and software are licensed separately because they are separate works: under CERN-OHL's own definitions the ESP32-C3 is an Available Component, so a hardware license on the board does not reach the code running on it. See [NOTICE](NOTICE) for the summary and [TRADEMARKS.md](TRADEMARKS.md) for trademark and affiliation.
 
 ## Status
 

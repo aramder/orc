@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Aram Dergevorkian
 // ORC shared helper: relay-channel <-> PCA9555 register-bit mapping.
 //
 // Canonical source: docs/subcircuit-capture-guide.md, "Channel mapping —

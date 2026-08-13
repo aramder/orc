@@ -287,7 +287,7 @@ Identical stage repeated for each relay channel: `RBn` (PCA9555 output → NPN b
 | ~~D-flyback ×10~~ | ~~BAT54C (JSCJ), SOT-23-3L~~ | ~~Per-channel coil flyback~~ | ~~C2135~~ | **Reversed 2026-08-01** — see below |
 | D-flyback ×10 (refs TBD) | **SS34** (MDD), SMA(DO-214AC) — reused, same part as D3/D5/D6 | Per-channel coil flyback | C8678 | ✅ **decided 2026-08-01, final call** — BAT54C dropped: neither candidate listing (onsemi C236933, JSCJ C2135) appears in either of two independently-maintained JLCPCB Basic-parts lists, and even the "obviously safe" fallback (SS14, C2480) turned up explicitly tagged "Extended Library" in one of them — none of today's diode tier checks landed clean. Reusing C8678 (already in the BOM for D3/D5/D6) carries **zero incremental reel-fee risk** regardless of its own exact tier, since that decision is already made and already paid for — unlike introducing any new diode part number. Trade-off accepted: gives up the SOT-23 footprint win, back to SMA(DO-214AC) at ×10 instances. |
 
-**Open, design-level item**: flyback diode presence on the *relay board itself* is still unconfirmed — needs bench inspection or a continuity/diode check across a coil's harness pins. Whether ORC needs to supply this diode at all is the remaining open question — the donor Motorola board apparently used a per-channel diode alongside the P-ch FET and NPN (user's own observation; PMUN1046A_RE has no component-level schematic to independently confirm this against — its own docs state no netlist was ever found for the URC). If it turns out not to be needed, SS34/C8678 above just doesn't get placed for this role — no harm in having already committed to it, since it's already in the BOM regardless.
+**Open, design-level item**: flyback diode presence on the *relay board itself* is still unconfirmed — needs bench inspection or a continuity/diode check across a coil's harness pins. Whether ORC needs to supply this diode at all is the remaining open question — the donor Motorola board apparently used a per-channel diode alongside the P-ch FET and NPN (user's own observation; the private teardown record has no component-level schematic to independently confirm this against — no netlist for the donor controller board was ever found). If it turns out not to be needed, SS34/C8678 above just doesn't get placed for this role — no harm in having already committed to it, since it's already in the BOM regardless.
 
 ### Harness connector
 
@@ -299,7 +299,7 @@ Identical stage repeated for each relay channel: `RBn` (PCA9555 output → NPN b
 
 ### Power flags (schematic-only, not orderable)
 
-PF1, PF3, PF5, PF6, PF7, PF8 — `power:PWR_FLAG`, 6×, ERC bookkeeping only. Each instance's Value field was renamed (PWR_FLAG1..PWR_FLAG8) to prevent them silently sharing one net by symbol identity — see kicad-mcp-logbook.md's 2026-08-01 entries if the reason isn't obvious from context.
+PF1, PF3, PF5, PF6, PF7, PF8 — `power:PWR_FLAG`, 6×, ERC bookkeeping only. Each instance's Value field was renamed (PWR_FLAG1..PWR_FLAG8) to prevent them silently sharing one net by symbol identity: two `PWR_FLAG` instances left at the default Value were resolved as the same symbol and collapsed onto one net, which ERC then flagged as two power-output pins tied together.
 
 ---
 
