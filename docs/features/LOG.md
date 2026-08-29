@@ -3,6 +3,25 @@
 Retired/active ID index for `docs/features/`. See [README.md](README.md) for
 the shard convention. Next free ID: **FR-006** / **BUG-004**.
 
+## Firmware build order — read before picking up work
+
+**FR-005 -> FR-003.** In that order, and FR-005 is the next item to start.
+
+> ⚠️ **Severity inverts against the order here, deliberately.** FR-005 is
+> MEDIUM and FR-003 is HIGH, so picking by severity alone selects FR-003 —
+> which cannot be built first. FR-003 needs a second SDO object, and the
+> handler is a hard-coded single (index, sub-index) pair; adding one without
+> FR-005 means a parallel branch that FR-005 then has to unpick.
+>
+> **FR-002** also sits behind FR-005 *if* it signals faults via a new
+> object-dictionary entry. If it uses TPDO2's spare byte 7 instead, it does
+> not. **Decide that mechanism before starting FR-002**, then keep or drop the
+> dependency.
+
+Downstream: `rigos-core` **FR-062**'s CAN transport waits on FR-003. Its I2C
+and USB transports are already unblocked, so this chain gates one transport,
+not the feature.
+
 | ID | Title | Status |
 |---|---|---|
 | FR-001 | USB bench/debug interface firmware (`usb_bench`) | superseded by FR-004 (2026-08-10) — `usb_bench` retired, its function consolidated into `canopen_app`. Real-hardware findings/fixes stay valid history. |
