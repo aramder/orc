@@ -48,6 +48,7 @@
 #include <Wire.h>
 #include <Preferences.h>
 #include <ctype.h>
+#include <string.h>
 #include "driver/twai.h"
 #include "esp_timer.h"
 #include "orc_can_addr.h"
@@ -293,8 +294,23 @@ static bool requireRelayHardware() {
 // below); not a blanket replacement of every `Serial` call in this file
 // (that's still open, same as BUG-002 left it -- see that bug's "options
 // 2/3" for the fuller audit if this ever resurfaces on an ungated call).
+//
+// BUG-004 fix (2026-08-29, real hardware): the original guard checked
+// `availableForWrite() > 0` -- room for at least 1 byte -- then handed the
+// WHOLE string to Serial.print(), which commits to writing all of it. With
+// BUG-002's setTxTimeoutMs(20), a write that didn't fully fit timed out
+// partway through and the remainder (trailing \n included) was silently
+// dropped, gluing the truncated line onto whatever the next Serial call
+// wrote -- observed corrupting Heartbeat lines whenever the backlog notice
+// below fired (CAN backed up/disconnected), making passive HB parsing
+// 100% non-functional on the rigos-core host side. Compare against
+// strlen(s) instead, so a message that won't fit cleanly is dropped
+// ENTIRELY rather than partially -- a missing line is recoverable (the
+// next periodic broadcast self-corrects), a corrupted one poisons
+// whatever comes after it too. See docs/features/BUG-004.md.
 static void printBestEffort(const char *s) {
-  if (Serial.availableForWrite() > 0) {
+  size_t len = strlen(s);
+  if (Serial.availableForWrite() >= (int)len) {
     Serial.print(s);
   }
 }
@@ -337,7 +353,20 @@ static bool twaiSend(uint32_t cobId, const uint8_t *data, uint8_t dlc) {
 
   twai_status_info_t status;
   if (twai_get_status_info(&status) == ESP_OK && status.msgs_to_tx > 0) {
-    char msg[128];
+    // BUG-004's REAL root cause lived here, not in printBestEffort() (see
+    // that function's comment and docs/features/BUG-004.md for the full
+    // story): this buffer was 128 bytes, but the formatted string below is
+    // 143 chars + NUL = 144 bytes at its shortest realistic substitution
+    // (msgs_to_tx=2, cobId=0x280) -- snprintf() itself silently truncates
+    // to 127 chars + NUL, cutting the string (newline included) at exactly
+    // "...stays cur" BEFORE printBestEffort() ever sees it. Hardening
+    // printBestEffort() against partial Serial writes (done above) could
+    // never have fixed a string that was already truncated on arrival.
+    // Sized generously past the actual max (currently under 160 even at
+    // msgs_to_tx's realistic max, tx_queue_len=5) rather than trimmed to
+    // the exact byte count, so a future wording tweak doesn't silently
+    // reopen this.
+    char msg[192];
     snprintf(msg, sizeof(msg),
              "TWAI TX backlog detected (%lu msg(s) still queued) before sending COB-ID "
              "0x%03lX -- clearing stale backlog so this status stays current (BUG-003).\n",
