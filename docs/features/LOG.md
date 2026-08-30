@@ -1,11 +1,12 @@
 # Work-item ID log
 
 Retired/active ID index for `docs/features/`. See [README.md](README.md) for
-the shard convention. Next free ID: **FR-006** / **BUG-004**.
+the shard convention. Next free ID: **FR-006** / **BUG-005**.
 
 ## Firmware build order — read before picking up work
 
-**FR-005 -> FR-003.** In that order, and FR-005 is the next item to start.
+**FR-005 -> FR-003.** FR-005 is done (2026-08-29, merged to `main`, verified
+on real hardware); **FR-003 is next up.**
 
 > ⚠️ **Severity inverts against the order here, deliberately.** FR-005 is
 > MEDIUM and FR-003 is HIGH, so picking by severity alone selects FR-003 —
