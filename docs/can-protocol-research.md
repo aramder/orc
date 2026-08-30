@@ -335,6 +335,25 @@ interval in **milliseconds**, not Hz — convert at the host
 (`interval_ms = 1000 / Hz`). No custom protocol needed; any generic CANopen
 configuration tool already knows how to write a TPDO's event timer.
 
+**Dispatch — table-driven object dictionary (FR-005, 2026-08-29).** The SDO
+server is not a general CANopen stack; it dispatches expedited transfers
+(read/write, ≤4-byte values) against a small table of `OrcSdoObject` rows
+(`firmware/lib/orc_canopen/orc_canopen.h`), each carrying index, sub-index,
+size, RO/WO/RW access, and read/write accessor function pointers. `1801h`
+sub-index 5 above is the table's one row today; adding an object (e.g.
+FR-002's fault flags, FR-003's applied-mask read) is a table row in
+`firmware/src/canopen_app/main.cpp`, not a new branch in the dispatcher.
+Accessors return `bool` so a read/write can fail (e.g. a live I2C read) and
+abort the transfer (`0x06060000`, "access failed due to a hardware error")
+rather than return a fabricated value.
+
+Abort codes on a lookup miss are index-vs-sub-index-specific, per CiA 301's
+own abort-code table: an unknown **index** aborts `0x06020000` ("object does
+not exist in the object dictionary"); an unknown **sub-index of a known
+index** aborts `0x06090011` ("sub-index does not exist"). Writing a
+read-only object aborts `0x06010002`; reading a write-only object aborts
+`0x06010001`.
+
 **Persistence**: the request was for this to survive a power cycle.
 CANopen's fully-conformant mechanism is object `1010h` ("Store parameters") —
 writing a specific ASCII signature to a sub-index tells the device to save
