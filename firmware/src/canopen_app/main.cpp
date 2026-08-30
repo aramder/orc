@@ -479,17 +479,60 @@ static void handleRpdo1(const twai_message_t &msg) {
   printBestEffort(line);
 }
 
-static void handleSdoRequest(const twai_message_t &msg) {
-  uint16_t newValue = 0;
-  bool changed = false;
+// --- SDO object dictionary (FR-005) -----------------------------------------
+// One row per object. Accessors close over g_tpdo2IntervalMs/g_prefs via
+// `ctx` (unused here -- these two globals are file-scope already) rather
+// than via ctx, since this table has exactly one stateful object today;
+// FR-002/FR-003 add rows with real ctx pointers (e.g. a PCA9555 handle).
+static bool sdoReadTpdo2IntervalMs(void * /*ctx*/, uint32_t &outValue) {
+  outValue = g_tpdo2IntervalMs;
+  return true;
+}
+
+static bool sdoWriteTpdo2IntervalMs(void * /*ctx*/, uint32_t newValue) {
+  g_tpdo2IntervalMs = (uint16_t)newValue;
+  g_prefs.putUShort(kPrefsTpdo2Key, g_tpdo2IntervalMs);
+  Serial.printf("SDO write: TPDO2 event timer (1801h sub5) set to %u ms, persisted to NVS.\n", g_tpdo2IntervalMs);
+  return true;
+}
+
+static const OrcSdoObject kSdoObjectTable[] = {
+    // index, subIndex, sizeBytes, access, read, write, ctx
+    {kOrcSdoObjectIndex, kOrcSdoObjectSubIndex, 2, ORC_SDO_ACCESS_RW,
+     sdoReadTpdo2IntervalMs, sdoWriteTpdo2IntervalMs, nullptr},
+};
+static const size_t kSdoObjectTableLen = sizeof(kSdoObjectTable) / sizeof(kSdoObjectTable[0]);
+
+// Self-test for the failing-accessor path (FR-005 acceptance: "a read
+// accessor can signal failure, and that failure becomes an SDO abort rather
+// than a fabricated value"). FR-003's real failing object (live I2C read)
+// doesn't exist yet, so this builds a throwaway local table with a
+// deliberately-failing read accessor and drives orcHandleSdoRequest()
+// directly -- no CAN traffic, no change to kSdoObjectTable, nothing
+// wire-visible. Runs once at boot; logs PASS/FAIL to Serial.
+static bool sdoSelfTestAlwaysFailRead(void * /*ctx*/, uint32_t & /*outValue*/) {
+  return false;
+}
+
+static void runSdoHwFailureSelfTest() {
+  static const OrcSdoObject kTestTable[] = {
+      {0x2000, 0x00, 2, ORC_SDO_ACCESS_RO, sdoSelfTestAlwaysFailRead, nullptr, nullptr},
+  };
+  // Initiate upload (read) of 2000h/0: byte0 ccs=2 (0x40), index LE, subIndex.
+  uint8_t req[8] = {0x40, 0x00, 0x20, 0x00, 0, 0, 0, 0};
   uint8_t resp[8];
-  if (!orcHandleSdoRequest(msg.data, msg.data_length_code, g_tpdo2IntervalMs, newValue, changed, resp)) {
+  bool sent = orcHandleSdoRequest(req, sizeof(req), kTestTable, 1, resp);
+  uint32_t abortCode = (uint32_t)resp[4] | ((uint32_t)resp[5] << 8) |
+                        ((uint32_t)resp[6] << 16) | ((uint32_t)resp[7] << 24);
+  bool pass = sent && resp[0] == 0x80 && abortCode == kOrcSdoAbortHwError;
+  Serial.printf("SDO self-test (failing read accessor -> abort 0x%08lX): %s\n",
+                (unsigned long)abortCode, pass ? "PASS" : "FAIL");
+}
+
+static void handleSdoRequest(const twai_message_t &msg) {
+  uint8_t resp[8];
+  if (!orcHandleSdoRequest(msg.data, msg.data_length_code, kSdoObjectTable, kSdoObjectTableLen, resp)) {
     return;  // malformed request (DLC < 8), no response per CiA 301 convention
-  }
-  if (changed) {
-    g_tpdo2IntervalMs = newValue;
-    g_prefs.putUShort(kPrefsTpdo2Key, g_tpdo2IntervalMs);
-    Serial.printf("SDO write: TPDO2 event timer (1801h sub5) set to %u ms, persisted to NVS.\n", g_tpdo2IntervalMs);
   }
   twaiSend(orcCobId(kOrcCobIdSdoTxBase, g_nodeId), resp, 8);
 }
@@ -745,6 +788,10 @@ void setup() {
   orcInitCanAddrPins();
   g_nodeId = orcReadCanAddress();
   orcPrintCanAddress();
+
+  // FR-005 acceptance: demonstrate the failing-accessor path. Local table
+  // only, no CAN traffic -- see runSdoHwFailureSelfTest()'s comment.
+  runSdoHwFailureSelfTest();
 
   g_prefs.begin(kPrefsNamespace, false);
   g_tpdo2IntervalMs = g_prefs.getUShort(kPrefsTpdo2Key, kTpdo2DefaultIntervalMs);
