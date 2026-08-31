@@ -107,13 +107,32 @@ inline uint8_t orcClassifyTwaiHealth(twai_state_t state, uint32_t txErr, uint32_
   return ORC_TWAI_HEALTH_ACTIVE;
 }
 
+// FR-002: relay-hardware fault bits, byte-7 of TPDO2 (previously reserved,
+// always 0). A bitmask, not an enum, so future fault conditions (e.g. real
+// current sensing per design-inputs.md's open item) are additive bits rather
+// than a breaking re-encode. Reported continuously on every TPDO2 send
+// (not edge-triggered), so "fault cleared" needs no separate signal: the
+// next periodic send after `g_pca9555Present` goes true again simply reports
+// 0 like nothing happened -- consistent with FR-001's existing lazy re-probe
+// recovery.
+enum OrcRelayFault : uint8_t {
+  ORC_RELAY_FAULT_NONE = 0,
+  // Bit 0: the PCA9555 relay-driver expander did not ACK on I2C (missing,
+  // unpowered -- e.g. the isolated relay-power domain lost its supply while
+  // the ESP32/CAN side, on a separate rail, stayed up -- or genuinely
+  // faulted). Mirrors `g_pca9555Present` in canopen_app/main.cpp.
+  ORC_RELAY_FAULT_HARDWARE_ABSENT = 1u << 0,
+};
+
 // Pack the full 8-byte TPDO2 payload. `txErr`/`rxErr` come straight from
 // twai_status_info_t (declared uint32_t there, but the underlying hardware
 // register is 0-255 -- masked to a single byte here defensively rather than
 // assumed, per the real driver-struct check this pass). `uptimeSeconds` is
-// little-endian per CANopen's standard multi-byte convention.
+// little-endian per CANopen's standard multi-byte convention. `relayFault` is
+// an `OrcRelayFault` bitmask (FR-002) -- byte-7, formerly always-reserved-0.
 inline void orcPackTpdo2(twai_state_t state, uint32_t txErr, uint32_t rxErr,
-                          uint32_t uptimeSeconds, uint8_t out[8]) {
+                          uint32_t uptimeSeconds, uint8_t relayFault,
+                          uint8_t out[8]) {
   out[0] = orcClassifyTwaiHealth(state, txErr, rxErr);
   out[1] = (uint8_t)(txErr & 0xFF);
   out[2] = (uint8_t)(rxErr & 0xFF);
@@ -121,7 +140,7 @@ inline void orcPackTpdo2(twai_state_t state, uint32_t txErr, uint32_t rxErr,
   out[4] = (uint8_t)((uptimeSeconds >> 8) & 0xFF);
   out[5] = (uint8_t)((uptimeSeconds >> 16) & 0xFF);
   out[6] = (uint8_t)((uptimeSeconds >> 24) & 0xFF);
-  out[7] = 0;  // reserved
+  out[7] = relayFault;
 }
 
 // --- Heartbeat --------------------------------------------------------------

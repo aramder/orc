@@ -280,7 +280,7 @@ today — no invented fields:
 | 1 | TWAI TX error counter (0–255, raw hardware counter value) |
 | 2 | TWAI RX error counter (0–255, raw hardware counter value) |
 | 3–6 | Uptime, seconds since boot, `uint32` little-endian (CANopen's standard multi-byte convention) — ~136 years of headroom, chosen over a 2-byte field specifically so it never wraps during any realistic continuous-power deployment |
-| 7 | Reserved, send 0 |
+| 7 | Relay-hardware fault bitmask — see below (FR-002, added 2026-08-31; previously reserved, always 0) |
 
 **Byte 0 state enum — confirmed 2026-08-05 against ESP-IDF's real
 `driver/twai.h` (legacy API, what Arduino-ESP32 currently wraps), implemented
@@ -296,6 +296,39 @@ top of `RUNNING` is not just reasonable, it's the *only* way to get that
 granularity from this driver — confirmed correct, not just plausible. Final
 mapping, unchanged from the original proposal: `0`=stopped, `1`=running/
 error-active, `2`=error-warning, `3`=error-passive, `4`=bus-off/recovering.
+
+**Byte 7 — relay-hardware fault bitmask (FR-002, 2026-08-31).** A host
+watching only the heartbeat/TPDO1 cannot tell "PCA9555 relay driver present
+and fine" from "PCA9555 missing/unpowered/faulted" — both look like a
+perfectly normal-looking node on the wire (BUG-001's whole point was making
+the CAN side survive that condition rather than hard-halting, but surviving
+silently isn't the same as reporting it). Real motivating case: the PCA9555
+lives on the isolated relay-power domain, powered from the same rail that
+feeds the relay bus bar; if that rail loses power while the ESP32/CAN side
+(a separate supply) stays up, the node keeps sending a perfectly healthy-
+looking heartbeat forever with no indication the relay driver is dead.
+
+A bitmask (`OrcRelayFault` in `orc_canopen.h`), not an enum, so future fault
+conditions (real current sensing, if `design-inputs.md`'s open item on that
+is ever resolved) are additive bits rather than a breaking re-encode:
+
+| Bit | Meaning |
+|---|---|
+| 0 | PCA9555 did not ACK on I2C — mirrors `g_pca9555Present` in `canopen_app/main.cpp` (BUG-001/FR-001's existing lazy re-probe flag; this is the first thing outside `canopen_app` to read it) |
+| 1–7 | Reserved, send 0 |
+
+**Reported continuously, not edge-triggered** — every TPDO2 send carries the
+current state, so "fault cleared" needs no separate signal or EMCY message:
+the next periodic send after the PCA9555 comes back (or a fresh reprobe
+succeeds) simply reports `0` again, consistent with FR-001's existing lazy
+re-probe recovery. This was chosen over an EMCY object (CiA 301's more
+idiomatic per-fault-event mechanism, `kOrcCobIdEmcyBase` — allocated but
+still unused) specifically because it needs no new COB-ID, no CiA 301 EMCY
+payload design, and TPDO2 already broadcasts on a fixed cadence a host can
+already poll for bus health — the cheaper of the two mechanisms FR-002
+originally weighed. Consuming this on the `rigos-core` side is a separate
+FR in that repo (FR-002 explicitly scoped that cross-repo boundary), not
+folded into this firmware change.
 
 **One version caveat worth carrying forward**: ESP-IDF's `master` branch has
 since deprecated this legacy API in favor of a new node-based `esp_twai.h`

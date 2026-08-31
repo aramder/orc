@@ -465,8 +465,12 @@ static void sendTpdo2() {
   // of a 2-byte one. Found and fixed 2026-08-05 review -- see
   // docs/can-protocol-research.md's TPDO2 section.
   uint32_t uptimeSeconds = (uint32_t)(esp_timer_get_time() / 1000000);
+  // FR-002: report relay-hardware presence on the wire, not just internally.
+  // `g_pca9555Present` already exists (BUG-001/FR-001's lazy re-probe flag);
+  // this is the first thing outside canopen_app to read it.
+  uint8_t relayFault = g_pca9555Present ? ORC_RELAY_FAULT_NONE : ORC_RELAY_FAULT_HARDWARE_ABSENT;
   uint8_t payload[8];
-  orcPackTpdo2(status.state, status.tx_error_counter, status.rx_error_counter, uptimeSeconds, payload);
+  orcPackTpdo2(status.state, status.tx_error_counter, status.rx_error_counter, uptimeSeconds, relayFault, payload);
   twaiSend(orcCobId(kOrcCobIdTpdo2Base, g_nodeId), payload, 8);
 }
 

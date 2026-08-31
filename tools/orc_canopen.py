@@ -142,6 +142,11 @@ _TWAI_HEALTH_NAMES = {
 }
 
 
+# FR-002: byte-7 relay-hardware fault bitmask (previously reserved/always 0).
+# Mirror of OrcRelayFault in firmware/lib/orc_canopen/orc_canopen.h.
+RELAY_FAULT_HARDWARE_ABSENT = 1 << 0
+
+
 @dataclass
 class Tpdo2Status:
     health_code: int
@@ -149,6 +154,8 @@ class Tpdo2Status:
     tx_error_count: int
     rx_error_count: int
     uptime_seconds: int
+    relay_fault: int
+    relay_hardware_absent: bool
 
 
 def decode_tpdo2(data: bytes) -> Tpdo2Status | None:
@@ -160,12 +167,15 @@ def decode_tpdo2(data: bytes) -> Tpdo2Status | None:
         return None
     health_code = data[0]
     uptime_seconds = int.from_bytes(data[3:7], byteorder="little", signed=False)
+    relay_fault = data[7]
     return Tpdo2Status(
         health_code=health_code,
         health_name=_TWAI_HEALTH_NAMES.get(health_code, f"unknown (0x{health_code:02X})"),
         tx_error_count=data[1],
         rx_error_count=data[2],
         uptime_seconds=uptime_seconds,
+        relay_fault=relay_fault,
+        relay_hardware_absent=bool(relay_fault & RELAY_FAULT_HARDWARE_ABSENT),
     )
 
 
