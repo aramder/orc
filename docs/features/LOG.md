@@ -1,7 +1,7 @@
 # Work-item ID log
 
 Retired/active ID index for `docs/features/`. See [README.md](README.md) for
-the shard convention. Next free ID: **FR-006** / **BUG-005**.
+the shard convention. Next free ID: **FR-006** / **BUG-006**.
 
 ## Firmware build order — read before picking up work
 
@@ -34,3 +34,4 @@ not the feature.
 | BUG-003 | `canopen_app`'s `loop()` appears to enter a persistently slow state under sub-second RPDO1 commanding, starving Heartbeat/TPDO2 | implemented (2026-08-10, real hardware, 2 rounds — TX-queue backlog fix + `printBestEffort()` fixed the firmware-side contributor, confirmed via same-session A/B: 1/15→15/15 with a console reader, 1/15→6/15 without; remaining ~60% failure below ~1s cadence traced to real `CAN_ERR_CRTL` bus-level error frames, not firmware — resolved as a documented ~1s safe commanding interval in `docs/can-protocol-research.md`/`tools/README.md` rather than further firmware iteration) |
 | FR-005 | Replace the hard-coded SDO object handler with an object-dictionary table | open (2026-08-29 — split out of FR-003; shared prerequisite for FR-003 and FR-002) |
 | BUG-004 | `printBestEffort()` commits to partial `Serial` writes, gluing a truncated diagnostic onto the next protocol line and silently killing Heartbeat parsing | implemented (found 2026-08-29 by rigos-core session; real root cause was an undersized `snprintf` buffer at the `twaiSend()` backlog-notice call site, not `printBestEffort()` itself — see shard for the misdiagnosis-then-correction trail; verified 14/14 clean on real hardware) |
+| BUG-005 | An unpowered/absent PCA9555 stalls `loop()` to ~0.1 Hz, stretching CAN heartbeat/TPDO2 far past their 1000 ms cadence so the host reads the node as flapping | open (found 2026-08-30 by a rigos-core session on real hardware, isolated DC side disconnected; measured 9450 ms heartbeat period against a 1000 ms target. Mechanism suspected but NOT confirmed — see shard. Same symptom class as BUG-003, different cause) |
