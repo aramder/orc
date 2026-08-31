@@ -165,10 +165,11 @@ def main() -> int:
                 if status is None:
                     print(f"[TPDO2]     node {node_id}: malformed frame (DLC {msg.dlc} < 8)")
                 else:
+                    fault_note = " RELAY_HARDWARE_ABSENT" if status.relay_hardware_absent else ""
                     print(
                         f"[TPDO2]     node {node_id}: health={status.health_name} "
                         f"tx_err={status.tx_error_count} rx_err={status.rx_error_count} "
-                        f"uptime={status.uptime_seconds}s"
+                        f"uptime={status.uptime_seconds}s{fault_note}"
                     )
                 continue
 
