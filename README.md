@@ -6,7 +6,7 @@
   <img alt="ORC — Open Relay Controller" src="docs/media/banner-light.svg" width="100%">
 </picture>
 
-[![status](https://img.shields.io/badge/status-real--hardware_bring--up-orange?style=flat-square)](docs/features/LOG.md)
+[![status](https://img.shields.io/badge/status-stable-2da44e?style=flat-square)](docs/features/LOG.md)
 [![controller](https://img.shields.io/badge/controller-ESP32--C3-blue?style=flat-square)](#what-it-is)
 [![channels](https://img.shields.io/badge/channels-10_%C3%97_15A-2da44e?style=flat-square)](#what-it-is)
 [![donor](https://img.shields.io/badge/donor_unit-PMUN1046A-6e7681?style=flat-square)](#why)
@@ -85,8 +85,8 @@ One repo for design inputs, hardware, and firmware — no split-repo overhead fo
 | Path | Contents | Status |
 |---|---|---|
 | `docs/` | Design inputs, specs, architecture decisions | Active |
-| `hardware/` | KiCad project — schematic, PCB, BOM | Schematic captured, boards fabricated and populated, real-hardware bring-up in progress |
-| `firmware/` | PlatformIO / Arduino firmware | `canopen_app` is real application firmware (CAN + USB relay control), under active real-hardware bring-up |
+| `hardware/` | KiCad project — schematic, PCB, BOM | Schematic captured, boards fabricated, populated, and bring-up verified on real hardware |
+| `firmware/` | PlatformIO / Arduino firmware | `canopen_app` is real application firmware (CAN + USB relay control), verified on real hardware |
 | `tools/` | Host-side CAN/USB bench test scripts | Used against real hardware |
 
 ## License
@@ -103,6 +103,8 @@ Hardware and software are licensed separately because they are separate works: u
 
 ## Status
 
-**Real hardware in hand and under active bring-up.** Boards were sent to fab 2026-08-02, came back populated, and have been bench-tested since 2026-08-10: the PCA9555/I2C-isolator chain, the full 10-channel relay-driver mapping, and the CAN (RPDO1/TPDO1/TPDO2/Heartbeat) and USB control paths have all been exercised on real hardware, including three real firmware bugs found and fixed along the way (see [docs/features/LOG.md](docs/features/LOG.md) for the full BUG-001/002/003 history). One real mechanical fault (a harness connector shorting against the enclosure chassis) was also found and fixed on the bench — see [docs/circuit-draft.md](docs/circuit-draft.md) for the follow-up enclosure-clearance item.
+**Real-hardware bring-up complete.** Boards were sent to fab 2026-08-02, came back populated, and have been bench-tested since 2026-08-10: the PCA9555/I2C-isolator chain, the full 10-channel relay-driver mapping, and the CAN (RPDO1/TPDO1/TPDO2/Heartbeat) and USB control paths have all been exercised on real hardware. Five real firmware bugs were found and fixed along the way — BUG-001 through BUG-005, see [docs/features/LOG.md](docs/features/LOG.md) for the full history — the last of which (a liveness stall under an absent/unpowered PCA9555) was verified on real hardware 2026-09-04. One real mechanical fault (a harness connector shorting against the enclosure chassis) was also found and fixed on the bench — see [docs/circuit-draft.md](docs/circuit-draft.md) for the follow-up enclosure-clearance item.
+
+No further active development is planned barring a new bug. A couple of feature requests (FR-003, FR-005) remain open in the backlog but aren't being actively pursued right now.
 
 Working conventions for part selection, asset verification, and check gates: [docs/hardware-workflow.md](docs/hardware-workflow.md). Bench test tooling for talking to a real board over CAN/USB from a PC: [tools/](tools/).
