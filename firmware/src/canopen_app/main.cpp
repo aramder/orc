@@ -144,6 +144,12 @@ static char g_lineBuf[kMaxLineLen + 1];
 static size_t g_lineLen = 0;
 static bool g_lineOverflow = false;
 
+// Forward declaration: printBestEffort() is defined later in this file (near
+// twaiSend()), but pca9555WriteReg() below needs it -- BUG-005 fix moves its
+// failure diagnostic off a raw (blocking) Serial.printf() onto the
+// best-effort path, same reasoning as BUG-002/BUG-004.
+static void printBestEffort(const char *s);
+
 // --- PCA9555 I2C helpers, same pattern as pca9555_bringup --------------------
 static bool pca9555WriteReg(uint8_t reg, uint8_t value) {
   Wire.beginTransmission(kPca9555Addr);
@@ -151,13 +157,23 @@ static bool pca9555WriteReg(uint8_t reg, uint8_t value) {
   Wire.write(value);
   uint8_t result = Wire.endTransmission();
   if (result != 0) {
-    Serial.printf("PCA9555 I2C write FAILED (reg 0x%02X, val 0x%02X): endTransmission=%u\n",
-                  reg, value, result);
-    // Gone missing mid-session (unplugged, isolated-side power loss,
-    // etc.) -- drop the flag so the next relay-touching call (either
-    // interface) re-probes instead of repeating the same failing
-    // transaction. See probeAndConfigurePca9555()/requireRelayHardware().
+    // BUG-005 fix: only log on the actual present -> absent transition, not
+    // on every failed write while the chip is already known absent. Before
+    // this, EVERY failed write printed unconditionally via a raw (blocking)
+    // Serial.printf() -- one of three contributors this bug's shard
+    // identified to loop() stalling to ~0.1 Hz with the isolated DC side
+    // disconnected (docs/features/BUG-005.md, "mechanism 3"). Best-effort,
+    // not blocking, and rate-limited to one line per transition.
+    bool wasPresent = g_pca9555Present;
     g_pca9555Present = false;
+    if (wasPresent) {
+      char msg[128];
+      snprintf(msg, sizeof(msg),
+               "PCA9555 I2C write FAILED (reg 0x%02X, val 0x%02X): endTransmission=%u -- "
+               "hardware now considered absent.\n",
+               reg, value, result);
+      printBestEffort(msg);
+    }
     return false;
   }
   return true;
@@ -208,13 +224,22 @@ static bool pca9555ReadInputPorts(uint8_t &port0, uint8_t &port1) {
 // loop()'s health-check block, so an idle period with no incoming command
 // on either interface still self-heals) and on every applyRelayCommand()
 // (so an active command self-heals immediately).
+// BUG-005 fix: bail after the FIRST failed write instead of unconditionally
+// issuing all six. Before this, once a health-check cycle began against a
+// chip that had just gone unresponsive, all six ran even though the first
+// failure already cleared g_pca9555Present -- each of the remaining five was
+// another blocking I2C timeout for no benefit (this bug's shard's
+// "mechanism 1"). Safe: pca9555WriteReg() already clears g_pca9555Present on
+// any failure, so the next call into this function (or the lazy re-probe in
+// requireRelayHardware()) picks up the absent state correctly either way --
+// this only skips writes that would fail anyway once the first one has.
 static void reassertPca9555State() {
   if (!g_pca9555Present) return;
-  pca9555WriteReg(kRegOutputPort0, g_relayPort0);
-  pca9555WriteReg(kRegOutputPort1, g_relayPort1);
-  pca9555WriteReg(kRegPolarityPort0, 0x00);
-  pca9555WriteReg(kRegPolarityPort1, 0x00);
-  pca9555WriteReg(kRegConfigPort0, kOrcPca9555ConfigPort0);
+  if (!pca9555WriteReg(kRegOutputPort0, g_relayPort0)) return;
+  if (!pca9555WriteReg(kRegOutputPort1, g_relayPort1)) return;
+  if (!pca9555WriteReg(kRegPolarityPort0, 0x00)) return;
+  if (!pca9555WriteReg(kRegPolarityPort1, 0x00)) return;
+  if (!pca9555WriteReg(kRegConfigPort0, kOrcPca9555ConfigPort0)) return;
   pca9555WriteReg(kRegConfigPort1, kOrcPca9555ConfigPort1);
 }
 
@@ -250,12 +275,40 @@ static bool probeAndConfigurePca9555() {
   return true;
 }
 
+// BUG-005 fix: cooldown between lazy re-probe attempts. Root cause of the
+// bug this guards against (docs/features/BUG-005.md's "mechanism 2", the
+// dominant one): with no cooldown, EVERY RPDO1 frame reaching handleRpdo1()
+// re-triggers a full blocking I2C probe once the PCA9555 is absent -- and
+// because a stalled loop() lets RPDO1 frames pile up in the TWAI RX queue
+// (the host keeps sending its ~1 Hz keepalive regardless), the NEXT loop()
+// pass drains the whole backlog in one go, each frame re-triggering its own
+// blocking probe. That is self-reinforcing: the more behind loop() falls,
+// the more queued frames arrive to process next time, each adding another
+// timeout -- closely matching the measured ~9.4x stall (25s capture, ~5
+// frames deep on a tx_queue_len=5-class TWAI RX queue, times a
+// multi-hundred-ms I2C timeout each, compounding). Capping re-probe attempts
+// to at most one per kPca9555ProbeRetryIntervalMs, regardless of how many
+// relay-touching calls arrive in that window, breaks the compounding
+// entirely: worst case is one probe's timeout per window, not one per
+// queued frame. Matches kHealthCheckIntervalMs's existing 1000ms cadence
+// (the shard's own suggested direction: "gate ... on a much slower cadence
+// while g_pca9555Present is false").
+static unsigned long g_lastPca9555ProbeAttemptMillis = 0;
+static const uint32_t kPca9555ProbeRetryIntervalMs = 1000;
+
 // SET/GET/STATUS (USB) and RPDO1 (CAN) are the only things that legitimately
 // need the PCA9555. Called first thing by each: if hardware was already
 // known-present, this is a no-op check; if not, it makes one lazy live
-// attempt before giving up.
+// attempt before giving up -- rate-limited (see above) so a burst of calls
+// while the chip is absent costs at most one blocking probe per cooldown
+// window, not one per call.
 static bool requireRelayHardware() {
   if (g_pca9555Present) return true;
+  unsigned long now = millis();
+  if (now - g_lastPca9555ProbeAttemptMillis < kPca9555ProbeRetryIntervalMs) {
+    return false;  // still in cooldown from a recent failed probe
+  }
+  g_lastPca9555ProbeAttemptMillis = now;
   return probeAndConfigurePca9555();
 }
 
